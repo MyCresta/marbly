@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Marbly</title>
+<meta name="description" content="A physics marble run on a cozy desk. Glass, steel, brass, oak and more, sorted by density.">
+<meta name="theme-color" content="#120d0a">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/",
+    "rapier": "./vendor/rapier/rapier.js"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="loader">
+  <div class="loader-inner">
+    <div class="loader-mark" aria-hidden="true"><span></span></div>
+    <h1>Marbly</h1>
+    <div class="loader-track"><div id="loader-bar"></div></div>
+    <p id="loader-status">Warming up</p>
+  </div>
+</div>
+
+<header class="brand">
+  <h1>Marbly</h1>
+  <p>A marble run on the desk</p>
+</header>
+
+<nav class="views panel" aria-label="Camera">
+  <button type="button" data-view="overview" class="active">Overview</button>
+  <button type="button" data-view="helix">Helix</button>
+  <button type="button" data-view="funnel">Funnel</button>
+  <button type="button" data-view="sorter">Sorter</button>
+  <button type="button" data-view="follow">Follow</button>
+</nav>
+
+<div class="toggles panel">
+  <button type="button" id="wind" class="icon" aria-pressed="true" title="Fan">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c0-3 1.2-7 4-7 2 0 2.6 2.4 1 4-1.6 1.6-3.2 2-5 3Zm0 0c3 0 7 1.2 7 4 0 2-2.4 2.6-4 1-1.6-1.6-2-3.2-3-5Zm0 0c0 3-1.2 7-4 7-2 0-2.6-2.4-1-4 1.6-1.6 3.2-2 5-3Zm0 0c-3 0-7-1.2-7-4 0-2 2.4-2.6 4-1 1.6 1.6 2 3.2 3 5Z"/></svg>
+    <span>Fan</span>
+  </button>
+  <button type="button" id="sound" class="icon" aria-pressed="true" title="Sound">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+    <span>Sound</span>
+  </button>
+  <button type="button" id="fullscreen" class="icon" title="Fullscreen">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+  </button>
+</div>
+
+<aside class="card panel" aria-live="polite">
+  <button type="button" id="card-toggle" class="card-toggle" aria-label="Marble details">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 11v5M12 8v.01"/></svg>
+  </button>
+  <div class="card-body">
+    <p class="eyebrow" id="card-substance">Bearing steel</p>
+    <h2 id="card-name">Chrome Steel</h2>
+    <div class="density"><span id="card-density">7.85</span><small>g/cm³</small></div>
+    <div class="scale" aria-hidden="true">
+      <div class="scale-zone" data-zone="light" style="left:0;width:29.7%"><span>Light</span></div>
+      <div class="scale-zone" data-zone="medium" style="left:29.7%;width:29.2%"><span>Medium</span></div>
+      <div class="scale-zone" data-zone="heavy" style="left:58.9%;width:41.1%"><span>Heavy</span></div>
+      <div id="scale-marker"></div>
+    </div>
+    <dl class="facts">
+      <div><dt>Mass</dt><dd id="card-mass">64.2 g</dd></div>
+      <div><dt>Bounce</dt><dd id="card-bounce">Crisp</dd></div>
+      <div><dt>Grip</dt><dd id="card-grip">Slick</dd></div>
+      <div><dt>Lands in</dt><dd id="card-bin">Heavy</dd></div>
+    </dl>
+  </div>
+</aside>
+
+<div class="dock panel">
+  <div class="marbles" id="marbles" role="listbox" aria-label="Marbles"></div>
+  <div class="actions">
+    <button type="button" id="drop" class="primary">Drop</button>
+    <button type="button" id="drop-all">Drop all</button>
+    <button type="button" id="auto" aria-pressed="false">Auto</button>
+    <button type="button" id="clear">Clear</button>
+  </div>
+</div>
+
+<p id="hint" class="hint">Space drops a marble · 1 to 9 picks one · drag to look around</p>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
