@@ -37,6 +37,19 @@ Density sets mass, which decides how much the fan and air drag can push a marble
 * 1 to 9 picks a marble
 * A toggles auto drop, C clears the desk, F toggles follow cam
 * Left and right arrows switch course
+
+## Graphics quality
+
+The bars button in the top right cycles between Auto, High, Medium, Low and Minimal. Auto starts at Medium (Low on touch devices), measures the frame rate every second, steps down whenever it drops under 40 fps and steps back up after a few seconds above 57 fps. The choice is remembered.
+
+| Level | Resolution | Anti-aliasing | Depth of field | Glass | Shadows |
+| --- | --- | --- | --- | --- | --- |
+| High | up to 1.5x | 4x MSAA | yes | real transmission | lamp 2048 px plus moonlight |
+| Medium | up to 1x | FXAA | yes | refraction shader | lamp 1024 px |
+| Low | 0.8x | FXAA | no | refraction shader | lamp 1024 px, every 2nd frame |
+| Minimal | 0.6x | FXAA | no | refraction shader | lamp 512 px, every 3rd frame |
+
+Low and Minimal also turn off clearcoat and sheen on the materials. Hover the button to see the current frame rate.
 * Drag to orbit, scroll or pinch to zoom, right drag to pan
 
 ## Stack

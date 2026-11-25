@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { artPrintTexture, bookSpineTexture, makeNoise } from './textures.js';
+import { mergeStatic } from './optimize.js';
 import { buildClock, buildPinboard, buildSteam, buildDustMotes, buildPencilCup, buildGlasses, buildCable, contactShadow } from './decor.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -205,7 +206,8 @@ export function buildRoom(mats) {
   const curtains = [-1, 1].map((side) => {
     const geo = curtainGeo.clone();
     const base = Float32Array.from(geo.attributes.position.array);
-    const c = mesh(geo, mats.curtain);
+    const c = mesh(geo, mats.curtain, { cast: false });
+    c.userData.dynamic = true;
     c.position.set(win.cx + side * (win.w / 2 + 0.16), win.cy + 0.06, ROOM.back + 0.06);
     group.add(c);
     return { geo, base, side };
@@ -328,16 +330,13 @@ export function buildRoom(mats) {
   const flame = new THREE.Mesh(new THREE.SphereGeometry(0.006, 12, 8), mats.flame);
   flame.scale.set(0.7, 1.6, 0.7);
   flame.position.y = 0.058;
+  flame.userData.dynamic = true;
   candle.add(flame);
   candle.position.set(-1.12, shelves[1].y + 0.014, ROOM.back + 0.1);
   group.add(candle);
-  const candleLight = new THREE.PointLight(0xff9a48, 0.06, 1.2, 2);
-  candleLight.position.set(-1.12, shelves[1].y + 0.09, ROOM.back + 0.13);
-  group.add(candleLight);
   const flick = makeNoise(99);
   anim.push((t) => {
     const f = 0.75 + flick(t * 7, 0) * 0.5;
-    candleLight.intensity = 0.05 * f;
     flame.scale.set(0.7, 1.4 + f * 0.4, 0.7);
   });
 
@@ -373,6 +372,7 @@ export function buildRoom(mats) {
 
   const clock = buildClock(mats);
   clock.group.position.set(-0.07, 1.1, ROOM.back + 0.012);
+  clock.group.userData.dynamic = true;
   group.add(clock.group);
   const pinboard = buildPinboard(mats);
   pinboard.position.set(-0.07, 0.72, ROOM.back + 0.008);
@@ -448,6 +448,16 @@ export function buildRoom(mats) {
   books.rotation.y = -0.25;
   group.add(books);
 
+  group.updateMatrixWorld(true);
+  const wp = new THREE.Vector3();
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    o.getWorldPosition(wp);
+    if ((wp.z < ROOM.back + 0.32 && wp.y > 0.42) || wp.y < -0.05) o.castShadow = false;
+  });
+  desk.castShadow = false;
+  mergeStatic(group);
+
   return {
     group,
     lamp,
@@ -478,24 +488,29 @@ function buildFairyLights(mats, a, b) {
   group.add(wire);
   const bulbs = [];
   const count = 36;
-  const bulbGeo = new THREE.SphereGeometry(0.0065, 14, 10);
+  const bulbGeo = new THREE.SphereGeometry(0.0065, 10, 8);
+  const bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.62, 0.3).multiplyScalar(6) });
+  const inst = new THREE.InstancedMesh(bulbGeo, bulbMat, count);
+  inst.userData.dynamic = true;
+  const m4 = new THREE.Matrix4();
   for (let i = 0; i < count; i++) {
-    const p = curve.getPointAt((i + 0.5) / count);
-    const m = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffb15e, emissiveIntensity: 8 });
-    const bulb = new THREE.Mesh(bulbGeo, m);
-    bulb.position.copy(p).add(V(0, -0.009, 0.004));
-    bulb.scale.set(1, 1.3, 1);
-    group.add(bulb);
-    bulbs.push({ m, phase: Math.random() * 20 });
+    const p = curve.getPointAt((i + 0.5) / count).add(V(0, -0.009, 0.004));
+    m4.compose(p, new THREE.Quaternion(), V(1, 1.3, 1));
+    inst.setMatrixAt(i, m4);
+    inst.setColorAt(i, new THREE.Color(1, 1, 1));
+    bulbs.push({ i, phase: Math.random() * 20 });
   }
-  const glow = new THREE.PointLight(0xffa85a, 0.35, 2.2, 1.6);
-  glow.position.set((a.x + b.x) / 2, a.y - 0.15, a.z + 0.25);
-  group.add(glow);
+  group.add(inst);
+  const tint = new THREE.Color();
   const noise = makeNoise(5);
   return {
     group,
     update(t) {
-      for (const b of bulbs) b.m.emissiveIntensity = 6 + noise(t * 0.6 + b.phase, b.phase) * 5;
+      for (const b of bulbs) {
+        const k = 0.7 + noise(t * 0.6 + b.phase, b.phase) * 0.6;
+        inst.setColorAt(b.i, tint.setScalar(k));
+      }
+      inst.instanceColor.needsUpdate = true;
     },
   };
 }
@@ -555,9 +570,6 @@ function buildLamp(mats) {
   spot.shadow.radius = 4;
   group.add(spot);
   group.add(spot.target);
-  const glow = new THREE.PointLight(0xffbf80, 0.25, 0.8, 2);
-  glow.position.copy(head).addScaledVector(dir, 0.08);
-  group.add(glow);
   return { group, spot, head, target, base };
 }
 

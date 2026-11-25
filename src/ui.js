@@ -78,6 +78,7 @@ export function createUI() {
         snd.setAttribute('aria-pressed', String(on));
         o.onSound(on);
       });
+      $('#quality').addEventListener('click', () => o.onQuality());
       const fs = $('#fullscreen');
       if (!document.fullscreenEnabled) fs.hidden = true;
       fs.addEventListener('click', () => {
@@ -105,6 +106,10 @@ export function createUI() {
       document.querySelectorAll('.scale-zone').forEach((z) => z.classList.toggle('on', z.dataset.zone === cls));
       const btn = document.querySelectorAll('.marble')[i];
       if (btn) btn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    },
+    setQuality(mode, label, fps) {
+      $('#quality-label').textContent = mode === 'auto' ? `Auto · ${label}` : label;
+      $('#quality').title = `Graphics quality${fps ? `, ${Math.round(fps)} fps` : ''}. Click to change.`;
     },
     setCourse(course) {
       $('#course-name').textContent = course.name;

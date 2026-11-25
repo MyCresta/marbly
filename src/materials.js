@@ -104,6 +104,45 @@ function vaneGeometry(count = 3, twist = 2.2) {
   return geos;
 }
 
+function fakeGlass({ tint = '#ffffff', ior = 1.52, edge = 0.92, center = 0.42, body = 1.0 }) {
+  const m = new THREE.MeshPhysicalMaterial({
+    color: 0x000000, metalness: 0, roughness: 0.02, specularIntensity: 1, envMapIntensity: 1.5,
+    clearcoat: 1, clearcoatRoughness: 0.02, transparent: true, depthWrite: true,
+  });
+  m.userData.uniforms = {
+    glassTint: { value: new THREE.Color(tint) },
+    glassIor: { value: ior },
+    glassEdge: { value: edge },
+    glassCenter: { value: center },
+    glassBody: { value: body },
+  };
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, m.userData.uniforms);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('void main() {', `
+        uniform vec3 glassTint;
+        uniform float glassIor;
+        uniform float glassEdge;
+        uniform float glassCenter;
+        uniform float glassBody;
+        void main() {`)
+      .replace('#include <opaque_fragment>', `
+        vec3 gV = normalize(vViewPosition);
+        vec3 gN = normalize(normal);
+        float gFres = pow(1.0 - saturate(dot(gN, gV)), 2.5);
+        float gAlpha = mix(glassCenter, glassEdge, gFres);
+        vec3 gBody = vec3(0.0);
+        #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_PMREM )
+          vec3 gR = inverseTransformDirection(refract(-gV, gN, 1.0 / glassIor), viewMatrix);
+          gBody = textureLod(envMap, envMapRotation * gR, roughnessToMip(0.04)).rgb * envMapIntensity * glassTint * glassBody;
+        #endif
+        gl_FragColor = vec4(outgoingLight / gAlpha + gBody * (1.0 - gFres), gAlpha);
+      `);
+  };
+  m.customProgramCacheKey = () => 'fake-glass';
+  return m;
+}
+
 const CATSEYE_COLORS = ['#1e7bd8', '#ef7a1a', '#21a37a', '#d6283c', '#f2c230', '#7b3fd1'];
 const AURORA_PALETTES = [
   ['#f6efe2', '#e2603f', '#f1b24a', '#2f6f8f', '#1f2d3d'],
@@ -114,8 +153,8 @@ const AURORA_PALETTES = [
 
 export class MarbleFactory {
   constructor() {
-    this.sphere = new THREE.SphereGeometry(R, 64, 40);
-    this.core = new THREE.SphereGeometry(R * 0.86, 48, 32);
+    this.sphere = new THREE.SphereGeometry(R, 48, 32);
+    this.core = new THREE.SphereGeometry(R * 0.86, 32, 20);
     this.vanes = vaneGeometry(3);
     this.auroraTextures = AURORA_PALETTES.map((colors, i) => swirlTexture({ w: 512, h: 256, seed: 10 + i, colors }));
     const oakTex = woodTextures({ w: 512, h: 256, seed: 71, dark: '#8a5f36', light: '#d2a873', rings: 6, warp: 1.8, roughBase: 0.5 });
@@ -138,6 +177,12 @@ export class MarbleFactory {
     this.vaneMats = CATSEYE_COLORS.map((c) => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.25, clearcoat: 1, side: THREE.DoubleSide, emissive: c, emissiveIntensity: 0.06 }));
     this.coreMats = this.auroraTextures.map((map) => new THREE.MeshPhysicalMaterial({ map, roughness: 0.35, clearcoat: 0.4 }));
     this.shell = this.mats.glassShell();
+    this.fake = {
+      shell: fakeGlass({ tint: '#dff3f0', center: 0.38 }),
+      acrylic: fakeGlass({ tint: '#ff9fc0', ior: 1.49, center: 0.8, edge: 0.95, body: 1.25 }),
+    };
+    this.real = { shell: this.shell, acrylic: this.mats.acrylic };
+    this.glassMode = 'real';
     this.variant = 0;
   }
 
@@ -152,24 +197,37 @@ export class MarbleFactory {
     };
     switch (type.id) {
       case 'catseye': {
-        add(this.sphere, this.shell);
+        add(this.sphere, this.glass('shell')).userData.glass = 'shell';
         const mat = this.vaneMats[variant % this.vaneMats.length];
         for (const v of this.vanes) add(v, mat, false);
         break;
       }
       case 'aurora': {
-        add(this.sphere, this.shell);
+        add(this.sphere, this.glass('shell')).userData.glass = 'shell';
         const core = add(this.core, this.coreMats[variant % this.coreMats.length], false);
         core.rotation.set(variant * 1.3, variant * 0.7, 0);
         break;
       }
       case 'acrylic':
-        add(this.sphere, this.mats.acrylic);
+        add(this.sphere, this.glass('acrylic')).userData.glass = 'acrylic';
         break;
       default:
         add(this.sphere, this.mats[type.id]);
     }
     group.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
     return group;
+  }
+
+  glass(role) {
+    return (this.glassMode === 'real' ? this.real : this.fake)[role];
+  }
+
+  setGlassMode(mode, groups) {
+    this.glassMode = mode;
+    for (const g of groups) {
+      g.traverse((o) => {
+        if (o.userData.glass) o.material = this.glass(o.userData.glass);
+      });
+    }
   }
 }

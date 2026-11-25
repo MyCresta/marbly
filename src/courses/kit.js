@@ -75,6 +75,23 @@ export function nearestIndex(path, target, from = 0, to = path.points.length) {
   return best;
 }
 
+function decimate(path, step) {
+  const idx = [];
+  for (let i = 0; i < path.points.length; i += step) idx.push(i);
+  if (idx[idx.length - 1] !== path.points.length - 1) idx.push(path.points.length - 1);
+  const pick = (arr) => idx.map((i) => arr[i]);
+  return {
+    points: pick(path.points),
+    tangents: pick(path.tangents),
+    sides: pick(path.sides),
+    normals: pick(path.normals),
+    bank: pick(path.bank),
+    dist: pick(path.dist),
+    length: path.length,
+    source: idx,
+  };
+}
+
 export class CourseBuilder {
   constructor(meta) {
     this.meta = meta;
@@ -119,7 +136,9 @@ export class CourseBuilder {
   }
 
   channel(path, { material = 'maple', startCap = false, endCap = false, profileAt = null, friction = 0.55, restitution = 0.12, name = 'channel' } = {}) {
-    this.addPiece(sweepGeometry(path, this.profile, { startCap, endCap, profileAt }), material, { name });
+    const render = decimate(path, path.points.length > 120 ? 2 : 1);
+    const renderProfileAt = profileAt ? (i) => profileAt(render.source[i]) : null;
+    this.addPiece(sweepGeometry(render, this.profile, { startCap, endCap, profileAt: renderProfileAt }), material, { name });
     this.addTrimesh(channelCollider(path, this.profile, { startCap, endCap, profileAt }), friction, restitution, 'track');
   }
 

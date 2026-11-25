@@ -89,14 +89,15 @@ export function buildVortex() {
     return pts;
   };
   const bowlPts = ring(80);
-  const bowlInner = lathe(bowlPts.slice().reverse(), 128);
+  const bowlInner = lathe(ring(48).reverse(), 96);
   bowlInner.translate(F.x, 0, F.z);
   b.addPiece(bowlInner, 'copper', { name: 'funnel' });
   const th = 0.003;
   const outerPts = [[F.rim + th, F.top - 0.004]];
-  for (let i = bowlPts.length - 1; i >= 1; i--) outerPts.push([bowlPts[i][0] + th, bowlPts[i][1] - th]);
+  const lowPts = ring(48);
+  for (let i = lowPts.length - 1; i >= 1; i--) outerPts.push([lowPts[i][0] + th, lowPts[i][1] - th]);
   outerPts.push([F.hole + th, neckBottom]);
-  const bowlOuter = lathe(outerPts, 128);
+  const bowlOuter = lathe(outerPts, 96);
   bowlOuter.translate(F.x, 0, F.z);
   b.addPiece(bowlOuter, 'copper', { name: 'funnel' });
   b.addTrimesh(trimeshFromGeometry(lathe(bowlPts, 128).translate(F.x, 0, F.z)), 0.45, 0.2, 'funnel');

@@ -590,6 +590,7 @@ body.menu-open .results { opacity: 0; pointer-events: none; }
   .views button { padding: 7px 11px; font-size: 12.5px; }
   .toggles { top: 14px; }
   .toggles .icon span { display: none; }
+  .toggles #quality span { display: inline; font-size: 11.5px; }
   .toggles .icon { padding: 8px; }
   .dock {
     left: var(--gutter);

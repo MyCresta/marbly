@@ -11,8 +11,16 @@ import { PostPipeline } from './post.js';
 import { SoundBoard } from './audio.js';
 import { textTexture } from './textures.js';
 import { createUI } from './ui.js';
+import { mergeStatic } from './optimize.js';
 
 const MAX_MARBLES = 48;
+const QUALITY = {
+  high: { label: 'High', scale: 1.5, msaa: 4, fxaa: false, dof: true, bloom: true, bloomScale: 0.5, glass: 'real', spot: 2048, moon: true, shadowEvery: 1, simple: false },
+  medium: { label: 'Medium', scale: 1.0, msaa: 0, fxaa: true, dof: true, bloom: true, bloomScale: 0.35, glass: 'fake', spot: 1024, moon: false, shadowEvery: 1, simple: false },
+  low: { label: 'Low', scale: 0.8, msaa: 0, fxaa: true, dof: false, bloom: true, bloomScale: 0.25, glass: 'fake', spot: 1024, moon: false, shadowEvery: 2, simple: true },
+  minimal: { label: 'Minimal', scale: 0.6, msaa: 0, fxaa: true, dof: false, bloom: false, bloomScale: 0.25, glass: 'fake', spot: 512, moon: false, shadowEvery: 3, simple: true },
+};
+const LEVELS = ['high', 'medium', 'low', 'minimal'];
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 
 async function boot() {
@@ -28,7 +36,7 @@ async function boot() {
   renderer.toneMappingExposure = 1.1;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
-  let pixelRatio = Math.min(window.devicePixelRatio || 1, 1.75);
+  let pixelRatio = 1;
   renderer.setPixelRatio(1);
 
   const scene = new THREE.Scene();
@@ -56,15 +64,12 @@ async function boot() {
   moon.shadow.normalBias = 0.003;
   moon.shadow.radius = 6;
   scene.add(moon, moon.target);
-  const fill = new THREE.PointLight(0xffd2a8, 1.4, 6, 1.2);
-  fill.position.set(0.5, 1.2, 1.6);
+  const fill = new THREE.PointLight(0xffc896, 3.0, 7, 1.3);
+  fill.position.set(1.0, 1.15, 1.3);
   scene.add(fill);
   const wash = new THREE.PointLight(0xffb070, 0.9, 1.8, 1.4);
   wash.position.set(-0.35, 0.95, -0.12);
   scene.add(wash);
-  const floorLamp = new THREE.PointLight(0xffb878, 2.2, 6, 1.4);
-  floorLamp.position.set(1.5, 1.05, 0.9);
-  scene.add(floorLamp);
 
   const factory = new MarbleFactory();
   const sound = new SoundBoard();
@@ -185,8 +190,10 @@ async function boot() {
         doorMesh = m;
       }
       if (course.race && i === course.race.gatePieceIndex) gateMesh = m;
+      if (m === doorMesh || m === gateMesh) m.userData.dynamic = true;
       courseGroup.add(m);
     });
+    mergeStatic(courseGroup, { disposeOriginals: true });
     scene.add(courseGroup);
     if (course.fan) {
       fan = buildFan(mats, course.fan);
@@ -207,6 +214,7 @@ async function boot() {
     scene.environment = envRT.texture;
     scene.environmentIntensity = 1.25;
 
+    simplifyMaterials(scene, quality.current.simple);
     ui.setCourse(course);
     try { localStorage.setItem('marbly.course', course.id); } catch { }
     if (location.hash.slice(1) !== course.id) history.replaceState(null, '', `#${course.id}`);
@@ -371,6 +379,92 @@ async function boot() {
   const followDir = new THREE.Vector3(0.42, 0.42, 0.8).normalize();
   let dragging = false;
 
+  const quality = {
+    mode: 'auto',
+    level: 'medium',
+    current: QUALITY.medium,
+    ceiling: 0,
+    windowStart: 0,
+    frames: 0,
+    settle: 1.5,
+    good: 0,
+    lastUp: -1e9,
+    fps: 0,
+    apply(level) {
+      const q = QUALITY[level];
+      this.level = level;
+      this.current = q;
+      pixelRatio = Math.min(window.devicePixelRatio || 1, q.scale);
+      post.configure({ msaa: q.msaa, fxaa: q.fxaa, dof: q.dof, bloom: q.bloom, bloomScale: q.bloomScale });
+      simplifyMaterials(scene, q.simple);
+      resize();
+      renderer.transmissionResolutionScale = 0.5;
+      factory.setGlassMode(q.glass, state.marbles.map((m) => m.mesh));
+      const spot = room.lamp.spot;
+      if (spot.shadow.mapSize.x !== q.spot) {
+        spot.shadow.mapSize.set(q.spot, q.spot);
+        if (spot.shadow.map) {
+          spot.shadow.map.dispose();
+          spot.shadow.map = null;
+        }
+      }
+      moon.castShadow = q.moon;
+      renderer.shadowMap.autoUpdate = q.shadowEvery === 1;
+      renderer.shadowMap.needsUpdate = true;
+      this.settle = 1.5;
+      this.frames = 0;
+      this.windowStart = 0;
+      this.good = 0;
+      ui.setQuality(this.mode, q.label, this.fps);
+    },
+    setMode(mode) {
+      this.mode = mode;
+      try { localStorage.setItem('marbly.quality', mode); } catch { }
+      if (mode === 'auto') {
+        this.ceiling = 0;
+        this.apply(this.level);
+      } else {
+        this.apply(mode);
+      }
+    },
+    tick(now, dt) {
+      if (dt > 0.2) {
+        this.windowStart = 0;
+        return;
+      }
+      if (this.settle > 0) {
+        this.settle -= dt;
+        return;
+      }
+      if (!this.windowStart) {
+        this.windowStart = now;
+        this.frames = 0;
+        return;
+      }
+      this.frames++;
+      const span = (now - this.windowStart) / 1000;
+      if (span < 1) return;
+      this.fps = this.frames / span;
+      this.windowStart = now;
+      this.frames = 0;
+      ui.setQuality(this.mode, this.current.label, this.fps);
+      if (this.mode !== 'auto') return;
+      const i = LEVELS.indexOf(this.level);
+      if (this.fps < 40 && i < LEVELS.length - 1) {
+        if (now - this.lastUp < 8000) this.ceiling = i + 1;
+        this.apply(LEVELS[i + 1]);
+      } else if (this.fps > 57) {
+        this.good++;
+        if (this.good >= 4 && i > this.ceiling) {
+          this.lastUp = now;
+          this.apply(LEVELS[i - 1]);
+        }
+      } else {
+        this.good = 0;
+      }
+    },
+  };
+
   ui.init({
     types: MARBLE_TYPES,
     thumbs,
@@ -385,8 +479,19 @@ async function boot() {
     onCourse: (id) => { sound.unlock(); loadCourse(id); },
     onWind: (on) => { state.windOn = on; physics.windEnabled = on; },
     onSound: (on) => { sound.unlock(); sound.setEnabled(on); },
+    onQuality: () => {
+      const order = ['auto', ...LEVELS];
+      quality.setMode(order[(order.indexOf(quality.mode) + 1) % order.length]);
+    },
     massOf: (t) => (4 / 3) * Math.PI * MARBLE_RADIUS ** 3 * t.density * 1000,
   });
+
+  let savedQuality = 'auto';
+  try { savedQuality = localStorage.getItem('marbly.quality') || 'auto'; } catch { }
+  const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  quality.level = coarse ? 'low' : 'medium';
+  quality.mode = savedQuality === 'auto' || QUALITY[savedQuality] ? savedQuality : 'auto';
+  quality.apply(quality.mode === 'auto' ? quality.level : quality.mode);
 
   ui.progress(0.85, 'Building the course');
   await nextFrame();
@@ -420,7 +525,7 @@ async function boot() {
   let acc = 0;
   let elapsed = 0;
   let focus = camera.position.distanceTo(controls.target);
-  const perf = { sum: 0, n: 0, cooldown: 3 };
+  let frameCount = 0;
   const tmpV = new THREE.Vector3();
   const tmpSize = new THREE.Vector2();
   const counts = {};
@@ -431,6 +536,25 @@ async function boot() {
       for (let i = 0; i < n; i++) physics.step();
     },
     load: (id) => loadCourse(id, { instant: true }),
+    bench(frames = 20) {
+      const gl = renderer.getContext();
+      renderer.info.autoReset = false;
+      renderer.info.reset();
+      post.render(elapsed, focus);
+      gl.finish();
+      const calls = renderer.info.render.calls;
+      const tris = renderer.info.render.triangles;
+      renderer.info.autoReset = true;
+      const t0 = performance.now();
+      for (let i = 0; i < frames; i++) post.render(elapsed + i * 0.016, focus);
+      gl.finish();
+      const render = (performance.now() - t0) / frames;
+      const p0 = performance.now();
+      for (let i = 0; i < 240; i++) physics.step();
+      const phys = (performance.now() - p0) / 240;
+      return { render: +render.toFixed(1), calls, tris, physStepMs: +phys.toFixed(3), marbles: state.marbles.length, size: renderer.getDrawingBufferSize(new THREE.Vector2()).toArray() };
+    },
+    quality,
   };
 
   ui.progress(1, 'Ready');
@@ -445,27 +569,9 @@ async function boot() {
     last = now;
     elapsed += dt;
 
-    perf.sum += dt;
-    perf.n++;
-    perf.cooldown -= dt;
-    if (perf.n >= 90) {
-      const avg = perf.sum / perf.n;
-      if (avg > 1 / 38 && perf.cooldown < 0) {
-        if (pixelRatio > 1.01) {
-          pixelRatio = Math.max(1, pixelRatio - 0.35);
-          resize();
-        } else if (post.dofEnabled) {
-          post.dofEnabled = false;
-        } else if (room.lamp.spot.shadow.mapSize.x > 1024) {
-          room.lamp.spot.shadow.mapSize.set(1024, 1024);
-          room.lamp.spot.shadow.map?.dispose();
-          room.lamp.spot.shadow.map = null;
-        }
-        perf.cooldown = 3;
-      }
-      perf.sum = 0;
-      perf.n = 0;
-    }
+    quality.tick(now, dt);
+    frameCount++;
+    if (!renderer.shadowMap.autoUpdate && frameCount % quality.current.shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
 
     if (state.auto) {
       state.autoTimer -= dt;
@@ -638,6 +744,21 @@ async function boot() {
       const i = COURSES.findIndex((c) => c.id === course.id);
       const n = (i + (e.key === 'ArrowRight' ? 1 : COURSES.length - 1)) % COURSES.length;
       loadCourse(COURSES[n].id);
+    }
+  });
+}
+
+function simplifyMaterials(scene, simple) {
+  scene.traverse((o) => {
+    const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of mats) {
+      if (!m.isMeshPhysicalMaterial || m.userData.glass) continue;
+      if (m.userData.full === undefined) m.userData.full = { clearcoat: m.clearcoat, sheen: m.sheen };
+      const want = simple ? { clearcoat: 0, sheen: 0 } : m.userData.full;
+      if (m.clearcoat !== want.clearcoat || m.sheen !== want.sheen) {
+        m.clearcoat = want.clearcoat;
+        m.sheen = want.sheen;
+      }
     }
   });
 }
