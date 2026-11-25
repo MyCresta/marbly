@@ -59,6 +59,9 @@ export function createSceneMaterials() {
     ceramicDark: new THREE.MeshPhysicalMaterial({ color: 0x2f4a46, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 }),
     finishFlag: new THREE.MeshStandardMaterial({ color: 0xf1e9dc, roughness: 0.5 }),
     jar: new THREE.MeshPhysicalMaterial({ color: 0xffd9a8, roughness: 0.1, transparent: true, opacity: 0.35 }),
+    bumper: new THREE.MeshPhysicalMaterial({ color: 0xb8322a, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.12, emissive: 0xff5a3a, emissiveIntensity: 0.15 }),
+    pad: new THREE.MeshStandardMaterial({ color: 0x1d2228, roughness: 0.85, metalness: 0.1 }),
+    acrylicPane: new THREE.MeshPhysicalMaterial({ color: 0xf4fbff, metalness: 0, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.14, depthWrite: false, envMapIntensity: 1.4 }),
   };
   m.flame.color.multiplyScalar(6);
   return m;

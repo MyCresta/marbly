@@ -39,7 +39,7 @@ html, body {
   outline: none;
   cursor: grab;
 }
-#scene:active { cursor: grabbing; }
+
 
 button {
   font: inherit;

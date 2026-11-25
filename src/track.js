@@ -421,3 +421,90 @@ export function tubeCollider(path, radius, segments = 32) {
   }
   return { vertices: new Float32Array(verts), indices: new Uint32Array(indices) };
 }
+
+export function troughProfile({ width, wall = 0.03, corner = 0.012, thickness = 0.005, floorSegs = 8, cornerSegs = 4 }) {
+  const half = width / 2;
+  const inner = [];
+  inner.push({ x: -half, y: wall, nx: 1, ny: 0 });
+  for (let k = 0; k <= cornerSegs; k++) {
+    const a = Math.PI - (k / cornerSegs) * (Math.PI / 2);
+    inner.push({ x: -half + corner + Math.cos(a) * corner, y: corner - Math.sin(a) * corner, nx: -Math.cos(a), ny: Math.sin(a) });
+  }
+  for (let k = 1; k < floorSegs; k++) {
+    inner.push({ x: -half + corner + ((width - 2 * corner) * k) / floorSegs, y: 0, nx: 0, ny: 1 });
+  }
+  for (let k = 0; k <= cornerSegs; k++) {
+    const a = Math.PI * 1.5 + (k / cornerSegs) * (Math.PI / 2);
+    inner.push({ x: half - corner + Math.cos(a) * corner, y: corner + Math.sin(a) * corner, nx: -Math.cos(a), ny: -Math.sin(a) });
+  }
+  inner.push({ x: half, y: wall, nx: -1, ny: 0 });
+  const outer = inner.slice().reverse().map((p) => ({ x: p.x - p.nx * thickness, y: p.y - p.ny * thickness, nx: -p.nx, ny: -p.ny }));
+  const lipR = [{ x: half + thickness * 0.5, y: wall + thickness * 0.5, nx: 0, ny: 1 }];
+  const lipL = [{ x: -half - thickness * 0.5, y: wall + thickness * 0.5, nx: 0, ny: 1 }];
+  return { inner, loop: [...inner, ...lipR, ...outer, ...lipL] };
+}
+
+export function sweepLoop(path, loopAt, { uvScale = 1 } = {}) {
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indices = [];
+  const count = path.points.length;
+  const v = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  let m = 0;
+  for (let i = 0; i < count; i++) {
+    const loop = loopAt(i);
+    m = loop.length;
+    let acc = 0;
+    for (let j = 0; j <= m; j++) {
+      const p = loop[j % m];
+      if (j > 0) acc += Math.hypot(p.x - loop[j - 1].x, p.y - loop[(j - 1) % m].y);
+      frameAt(path, i, p.x, p.y, v);
+      positions.push(v.x, v.y, v.z);
+      n.copy(path.sides[i]).multiplyScalar(p.nx).addScaledVector(path.normals[i], p.ny).normalize();
+      normals.push(n.x, n.y, n.z);
+      uvs.push(acc * uvScale, path.dist[i] * uvScale);
+    }
+  }
+  const row = m + 1;
+  for (let i = 0; i < count - 1; i++) {
+    for (let j = 0; j < m; j++) {
+      const a = i * row + j;
+      const b = (i + 1) * row + j;
+      indices.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  fixWinding(geo);
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+export function sweepOpenCollider(path, lineAt) {
+  const verts = [];
+  const indices = [];
+  const count = path.points.length;
+  const v = new THREE.Vector3();
+  let m = 0;
+  for (let i = 0; i < count; i++) {
+    const line = lineAt(i);
+    m = line.length;
+    for (const p of line) {
+      frameAt(path, i, p.x, p.y, v);
+      verts.push(v.x, v.y, v.z);
+    }
+  }
+  for (let i = 0; i < count - 1; i++) {
+    for (let k = 0; k < m - 1; k++) {
+      const a = i * m + k;
+      const b = (i + 1) * m + k;
+      indices.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  return { vertices: new Float32Array(verts), indices: new Uint32Array(indices) };
+}

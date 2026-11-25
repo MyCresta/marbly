@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { COURSES } from '../src/courses/index.js';
-import { Physics, STEP } from '../src/physics.js';
+import { Physics } from '../src/physics.js';
 import { MARBLE_TYPES } from '../src/marbles.js';
 
 await RAPIER.init();
@@ -33,7 +33,7 @@ function runSingle(type, typeIndex, jitter = 0) {
   let finish = null;
   while (t < 40) {
     phys.step();
-    t += STEP;
+    t += phys.dt;
     const p = m.body.translation();
     const v = m.body.linvel();
     const sp = Math.hypot(v.x, v.y, v.z);
@@ -41,7 +41,7 @@ function runSingle(type, typeIndex, jitter = 0) {
     if (p.y > 0.05) { speedSum += sp; speedN++; }
     for (const st of course.stages || []) if (stages[st.id] === undefined && st.test(p)) stages[st.id] = t;
     if (course.finishTest && finish === null && course.finishTest(p, typeIndex)) finish = t;
-    rest = sp < 0.01 ? rest + STEP : 0;
+    rest = sp < 0.01 ? rest + phys.dt : 0;
     if ((rest > 0.8 && t > 1.5) || p.y < -0.6) break;
   }
   const p = m.body.translation();
@@ -81,15 +81,17 @@ if (args.crowd) {
       phys.addMarble(MARBLE_TYPES[q.ti], { x: s.x + (Math.random() - 0.5) * 0.006, y: s.y, z: s.z + (Math.random() - 0.5) * 0.006 });
     }
     phys.step();
-    t += STEP;
+    t += phys.dt;
   }
   let good = 0;
+  const counts = {};
   for (const m of phys.marbles) {
     const p = m.body.translation();
     const bin = binOf(p);
+    counts[bin] = (counts[bin] || 0) + 1;
     const want = course.expect ? course.expect(m.type) : null;
     if (want === null ? bin !== 'none' : bin === want) good++;
     else console.log('stray', m.type.id, f(p.x, 3), f(p.y, 3), f(p.z, 3), bin);
   }
-  console.log(`crowd: ${good}/${phys.marbles.length}`);
+  console.log(`crowd: ${good}/${phys.marbles.length}`, JSON.stringify(counts));
 }

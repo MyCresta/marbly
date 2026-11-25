@@ -3,12 +3,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import RAPIER from 'rapier';
 import { COURSES } from './courses/index.js';
-import { Physics, STEP } from './physics.js';
+import { Physics } from './physics.js';
 import { MARBLE_TYPES, MARBLE_RADIUS } from './marbles.js';
 import { createSceneMaterials, MarbleFactory } from './materials.js';
 import { buildRoom, buildFan } from './room.js';
 import { PostPipeline } from './post.js';
-import { SoundBoard } from './audio.js';
+import { SoundBoard, voiceKind } from './audio.js';
 import { textTexture } from './textures.js';
 import { createUI } from './ui.js';
 import { mergeStatic } from './optimize.js';
@@ -127,6 +127,9 @@ async function boot() {
   let envRT = null;
   let doorMesh = null;
   let gateMesh = null;
+  let mechMeshes = [];
+  let bumpGlow = 0;
+  let lastBump = 0;
   let gateLift = 0;
 
   const viewFor = (name) => {
@@ -138,6 +141,7 @@ async function boot() {
     return { pos: p.toArray(), target: v.target };
   };
 
+  let releaseGrab = () => {};
   const removeMarbleNow = (m) => {
     scene.remove(m.mesh);
     physics.removeMarble(m.phys);
@@ -151,6 +155,7 @@ async function boot() {
 
   const loadCourse = (id, { instant = false } = {}) => {
     const entry = COURSES.find((c) => c.id === id) || COURSES[0];
+    releaseGrab();
     if (physics) {
       for (const m of state.marbles) removeMarbleNow(m);
       state.marbles.length = 0;
@@ -190,6 +195,19 @@ async function boot() {
       if (m === doorMesh || m === gateMesh) m.userData.dynamic = true;
       courseGroup.add(m);
     });
+    mechMeshes = (course.mechanisms || []).map((def) => {
+      const g = new THREE.Group();
+      g.userData.dynamic = true;
+      for (const piece of def.pieces || []) {
+        const mesh = new THREE.Mesh(piece.geometry, mats[piece.material]);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        g.add(mesh);
+      }
+      g.position.fromArray(def.pivot);
+      courseGroup.add(g);
+      return g;
+    });
     mergeStatic(courseGroup, { disposeOriginals: true });
     scene.add(courseGroup);
     if (course.fan) {
@@ -198,6 +216,8 @@ async function boot() {
     }
     physics = new Physics(RAPIER, course);
     physics.windEnabled = state.windOn;
+    lastBump = 0;
+    bumpGlow = 0;
     plaques = buildPlaques(course, scene);
     const wind = course.zones.find((z) => z.type === 'wind');
     streaks = wind ? buildWindStreaks(course, wind, scene) : null;
@@ -549,6 +569,98 @@ async function boot() {
     if (id !== course.id && COURSES.some((c) => c.id === id)) loadCourse(id);
   });
 
+  const grab = {
+    marble: null,
+    pointerId: null,
+    plane: new THREE.Plane(),
+    offset: new THREE.Vector3(),
+    target: new THREE.Vector3(),
+    raycaster: new THREE.Raycaster(),
+    ndc: new THREE.Vector2(),
+    hover: null,
+    min: new THREE.Vector3(-0.86, 0.016, -0.44),
+    max: new THREE.Vector3(0.86, 0.9, 0.44),
+  };
+  const pointerRay = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    grab.ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    grab.raycaster.setFromCamera(grab.ndc, camera);
+    return grab.raycaster.ray;
+  };
+  const pickMarble = (ray) => {
+    let best = null;
+    let bestT = Infinity;
+    const c = new THREE.Vector3();
+    for (const m of state.marbles) {
+      if (m.retiring) continue;
+      c.copy(m.mesh.position);
+      const t = c.clone().sub(ray.origin).dot(ray.direction);
+      if (t < 0) continue;
+      const d = ray.distanceToPoint(c);
+      const reach = MARBLE_RADIUS * 1.9 + t * 0.006;
+      if (d < reach && t < bestT) {
+        bestT = t;
+        best = m;
+      }
+    }
+    return best;
+  };
+  const dragTo = (ray) => {
+    const hit = new THREE.Vector3();
+    if (!ray.intersectPlane(grab.plane, hit)) return;
+    grab.target.copy(hit).add(grab.offset).clamp(grab.min, grab.max);
+    physics.hold(grab.marble.phys, grab.target);
+  };
+  window.addEventListener('pointerdown', (e) => {
+    if (e.target !== canvas || grab.marble) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const ray = pointerRay(e);
+    const m = pickMarble(ray);
+    if (!m) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    sound.unlock();
+    controls.enabled = false;
+    grab.marble = m;
+    grab.pointerId = e.pointerId;
+    m.held = true;
+    if (state.tween) state.tween = null;
+    const normal = camera.getWorldDirection(new THREE.Vector3()).negate();
+    grab.plane.setFromNormalAndCoplanarPoint(normal, m.mesh.position);
+    const hit = new THREE.Vector3();
+    ray.intersectPlane(grab.plane, hit);
+    grab.offset.copy(m.mesh.position).sub(hit).multiplyScalar(0.5);
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = 'grabbing';
+    dragTo(ray);
+    ui.hideHint();
+  }, { capture: true });
+  canvas.addEventListener('pointermove', (e) => {
+    if (grab.marble && e.pointerId === grab.pointerId) {
+      dragTo(pointerRay(e));
+      return;
+    }
+    if (e.pointerType !== 'mouse' || e.buttons) return;
+    const over = pickMarble(pointerRay(e));
+    if (over !== grab.hover) {
+      grab.hover = over;
+      canvas.style.cursor = over ? 'grab' : '';
+    }
+  });
+  const endGrab = (e) => {
+    if (!grab.marble || (e && e.pointerId !== grab.pointerId)) return;
+    physics.release(grab.marble.phys);
+    grab.marble.held = false;
+    grab.marble = null;
+    grab.pointerId = null;
+    controls.enabled = true;
+    canvas.style.cursor = grab.hover ? 'grab' : '';
+  };
+  releaseGrab = () => endGrab();
+  canvas.addEventListener('pointerup', endGrab);
+  canvas.addEventListener('pointercancel', endGrab);
+  canvas.addEventListener('lostpointercapture', endGrab);
+
   const markInteraction = () => {
     sound.unlock();
     if (state.tween) state.tween = null;
@@ -572,10 +684,11 @@ async function boot() {
   const tmpV = new THREE.Vector3();
   const tmpSize = new THREE.Vector2();
   const counts = {};
+  const rollMix = { metal: { amount: 0, speed: 0 }, glass: { amount: 0, speed: 0 }, plastic: { amount: 0, speed: 0 }, wood: { amount: 0, speed: 0 }, rubber: { amount: 0, speed: 0 } };
 
   window.__marbly = {
     warp(seconds) {
-      const n = Math.round(seconds / STEP);
+      const n = Math.round(seconds / physics.dt);
       for (let i = 0; i < n; i++) physics.step();
     },
     load: (id) => loadCourse(id, { instant: true }),
@@ -598,6 +711,13 @@ async function boot() {
       return { render: +render.toFixed(1), calls, tris, physStepMs: +phys.toFixed(3), marbles: state.marbles.length, size: renderer.getDrawingBufferSize(new THREE.Vector2()).toArray() };
     },
     quality,
+    screenOf(i) {
+      const m = state.marbles[i];
+      if (!m) return null;
+      const v = m.mesh.position.clone().project(camera);
+      const r = canvas.getBoundingClientRect();
+      return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height, p: m.mesh.position.toArray(), held: !!m.held };
+    },
   };
 
   ui.progress(1, 'Ready');
@@ -637,19 +757,41 @@ async function boot() {
 
     acc += dt;
     let steps = 0;
-    while (acc >= STEP && steps < 12) {
+    const maxSteps = Math.round(0.05 / physics.dt);
+    while (acc >= physics.dt && steps < maxSteps) {
       physics.step();
-      acc -= STEP;
+      acc -= physics.dt;
       steps++;
     }
-    if (steps === 12) acc = 0;
+    if (steps === maxSteps) acc = 0;
     tickRace(dt);
 
     if (doorMesh) doorMesh.quaternion.setFromAxisAngle(course.trapdoor.axis, physics.door.open * 1.15);
+    for (let i = 0; i < mechMeshes.length; i++) {
+      const body = physics.mechanisms[i].body;
+      const p = body.translation();
+      const q = body.rotation();
+      mechMeshes[i].position.set(p.x, p.y, p.z);
+      mechMeshes[i].quaternion.set(q.x, q.y, q.z, q.w);
+    }
+    for (const m of physics.marbles) {
+      if (m.bumpT > lastBump) {
+        lastBump = m.bumpT;
+        bumpGlow = 1;
+        const bp = m.body.translation();
+        tmpV.set(bp.x, bp.y, bp.z);
+        const dist = camera.position.distanceTo(tmpV);
+        sound.bumper(tmpV.project(camera).x * 0.8, dist);
+      }
+    }
+    bumpGlow = Math.max(0, bumpGlow - dt * 5);
+    mats.bumper.emissiveIntensity = 0.15 + bumpGlow * 2.2;
 
     sound.frame();
-    let rolling = 0;
-    let rollSpeed = 0;
+    for (const k in rollMix) {
+      rollMix[k].amount = 0;
+      rollMix[k].speed = 0;
+    }
     let funnelAct = 0;
     for (const b of course.bins) counts[b.id] = 0;
     const F = course.funnel;
@@ -667,6 +809,7 @@ async function boot() {
         m.retireT += dt;
         scale = Math.max(0, 1 - m.retireT / 0.35);
         if (m.retireT >= 0.35) {
+          if (grab.marble === m) endGrab();
           removeMarbleNow(m);
           state.marbles.splice(i, 1);
           if (state.follow === m) state.follow = null;
@@ -686,25 +829,29 @@ async function boot() {
       }
       if (p.y < room.room.floor + 0.05 && m.settled > 1.5) retire(m);
       if (p.y < room.room.floor - 0.5) retire(m);
+      if (m.held) m.settled = 0;
       if (!inBin && !m.retiring && m.settled > 4 && !(course.race && state.race.phase === 'ready')) retire(m);
 
       const w = body.angvel();
       const spin = Math.hypot(w.x, w.y, w.z) * MARBLE_RADIUS;
       const inFunnel = F && Math.hypot(p.x - F.x, p.z - F.z) < F.rim && p.y > F.top - F.depth - 0.01 && p.y < F.top + 0.03;
-      if (speed > 0.05 && spin > speed * 0.6 && !inFunnel && p.y > 0.03) {
-        rolling += Math.min(1, speed);
-        rollSpeed = Math.max(rollSpeed, speed);
+      const onXylo = X && Math.abs(p.z - X.z) < 0.02 && p.x > X.x0 && p.x < X.x0 + X.count * X.pitch && p.y - X.topAt(p.x) < 0.022;
+      if (speed > 0.05 && spin > speed * 0.6 && !inFunnel && !onXylo && !inBin && p.y > 0.03) {
+        const mix = rollMix[voiceKind(m.type.id)];
+        const near = 1 / (0.5 + camera.position.distanceTo(m.mesh.position) * 0.8);
+        mix.amount += Math.min(1, speed) * near;
+        mix.speed = Math.max(mix.speed, speed);
       }
       if (inFunnel) funnelAct += Math.min(2, speed);
-      if (X && Math.abs(p.z - X.z) < 0.02 && p.x > X.x0 && p.x < X.x0 + X.count * X.pitch && p.y - X.topAt(p.x) < 0.022) {
+      if (onXylo) {
         const bar = Math.floor((p.x - X.x0) / X.pitch);
         if (bar !== m.bar && bar >= 0 && bar < X.count) {
           m.bar = bar;
           tmpV.set(p.x, p.y, p.z).project(camera);
-          sound.note(X.bars[bar].freq, Math.min(1, speed * 1.6 + 0.2), tmpV.x * 0.8, camera.position.distanceTo(m.mesh.position));
+          sound.note(X.bars[bar].freq, Math.min(1, speed * 1.6 + 0.2), tmpV.x * 0.8, camera.position.distanceTo(m.mesh.position), m.type.id, m.phys.mass);
         }
       }
-      if (m.phys.impact > 0.12) {
+      if (m.phys.impact > 0.12 && !onXylo) {
         tmpV.set(p.x, p.y, p.z).project(camera);
         const dist = camera.position.distanceTo(m.mesh.position);
         const surface = inBin && p.y < 0.035 ? 'felt' : inFunnel ? 'copper' : 'wood';
@@ -719,8 +866,7 @@ async function boot() {
     room.update(elapsed, dt, renderer.getDrawingBufferSize(tmpSize).y * 0.004);
     room.clock.update(dt, () => sound.tick(camera.position.distanceTo(room.clock.group.position)));
     sound.ambient({
-      rolling,
-      rollPitch: Math.min(1.5, rollSpeed),
+      rolling: rollMix,
       funnel: funnelAct,
       fan: fanLevel,
       fanDistance: fan ? camera.position.distanceTo(fan.group.children[0].position) : 3,

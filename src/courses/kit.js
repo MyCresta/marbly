@@ -119,27 +119,33 @@ export class CourseBuilder {
   }
 
   addTrimesh(data, friction, restitution, tag) {
-    this.colliders.push({ kind: 'trimesh', ...data, friction, restitution, tag });
+    const rolling = tag === 'track' || tag === 'funnel' || tag === 'hopper';
+    this.colliders.push({ kind: 'trimesh', ...data, friction, restitution: rolling ? 0 : restitution, combine: rolling ? 'min' : null, tag });
   }
 
-  box(w, h, d, x, y, z, { list = null, material = null, collide = true, friction = 0.5, restitution = 0.25, rotY = 0, rotZ = 0, gate = false, name, tag = 'box' } = {}) {
+  box(w, h, d, x, y, z, { list = null, material = null, collide = true, friction = 0.5, restitution = 0.25, rotX = 0, rotY = 0, rotZ = 0, gate = false, name, tag = 'box', combine = null } = {}) {
     const g = new THREE.BoxGeometry(w, h, d);
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, rotZ, 'YXZ'));
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rotX, rotY, rotZ, 'YXZ'));
     g.applyQuaternion(q);
     g.translate(x, y, z);
     if (list) list.push(g);
     else if (material) this.addPiece(g, material, { name });
     if (collide) {
-      this.colliders.push({ kind: 'cuboid', half: [w / 2, h / 2, d / 2], pos: [x, y, z], rot: rotY || rotZ ? [q.x, q.y, q.z, q.w] : null, friction, restitution, tag, gate });
+      this.colliders.push({ kind: 'cuboid', half: [w / 2, h / 2, d / 2], pos: [x, y, z], rot: rotX || rotY || rotZ ? [q.x, q.y, q.z, q.w] : null, friction, restitution, tag, gate, combine });
     }
     return g;
   }
 
-  channel(path, { material = 'maple', startCap = false, endCap = false, profileAt = null, friction = 0.55, restitution = 0.12, name = 'channel' } = {}) {
-    const render = decimate(path, path.points.length > 120 ? 2 : 1);
-    const renderProfileAt = profileAt ? (i) => profileAt(render.source[i]) : null;
-    this.addPiece(sweepGeometry(render, this.profile, { startCap, endCap, profileAt: renderProfileAt }), material, { name });
-    this.addTrimesh(channelCollider(path, this.profile, { startCap, endCap, profileAt }), friction, restitution, 'track');
+  channel(path, { material = 'maple', startCap = false, endCap = false, profileAt = null, friction = 0.55, restitution = 0.12, name = 'channel', render = true, collide = true, door = null, renderStep = null } = {}) {
+    if (render) {
+      const r = decimate(path, renderStep || (path.points.length > 120 ? 2 : 1));
+      const renderProfileAt = profileAt ? (i) => profileAt(r.source[i]) : null;
+      this.addPiece(sweepGeometry(r, this.profile, { startCap, endCap, profileAt: renderProfileAt }), material, { name });
+    }
+    if (collide) {
+      this.addTrimesh(channelCollider(path, this.profile, { startCap, endCap, profileAt }), friction, restitution, 'track');
+      if (door) this.colliders[this.colliders.length - 1].door = door;
+    }
   }
 
   tube(path, { material = 'copper', radius = CHANNEL.radius, thickness = 0.003, friction = 0.45, restitution = 0.1 } = {}) {
@@ -203,6 +209,16 @@ export class CourseBuilder {
       }
     }
     return V(x, top - 0.012, z);
+  }
+
+  pegZ(x, y, z, radius, length, { list = null, friction = 0.4, restitution = 0.5 } = {}) {
+    const g = new THREE.CylinderGeometry(radius, radius, length, 14);
+    g.rotateX(Math.PI / 2);
+    g.translate(x, y, z);
+    if (list) list.push(g);
+    const q = new THREE.Quaternion().setFromAxisAngle(V(1, 0, 0), Math.PI / 2);
+    this.colliders.push({ kind: 'cylinder', halfHeight: length / 2, radius, pos: [x, y, z], rot: [q.x, q.y, q.z, q.w], friction, restitution, tag: 'peg' });
+    return g;
   }
 
   tray({ x0, x1, z0, z1, dividers = [], along = 'x', floor = 0.008, wall = 0.052, tallSides = {}, labels = [], plaqueSide = 'front' }) {

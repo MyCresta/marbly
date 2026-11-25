@@ -2,6 +2,7 @@ import { buildVortex } from './vortex.js';
 import { buildSwitchback } from './switchback.js';
 import { buildLoop } from './loop.js';
 import { buildRace } from './race.js';
+import { buildObstacles } from './obstacles.js';
 import { densityClass } from '../marbles.js';
 
 export const COURSES = [
@@ -20,13 +21,19 @@ export const COURSES = [
   {
     id: 'loop',
     name: 'Loop',
-    blurb: 'A long drop into a loop, right at the edge of making it',
-    build: () => ({ ...buildLoop(), expect: null }),
+    blurb: 'A 45 degree drop into a corkscrew loop, with a trapdoor for stragglers',
+    build: () => ({ ...buildLoop(), expect: () => 'looped' }),
   },
   {
     id: 'race',
     name: 'Race',
-    blurb: 'Nine lanes, one of each marble, a gate and a stopwatch',
+    blurb: 'Nine lanes merge into one shared track, first to the arch wins',
     build: () => ({ ...buildRace(), expect: () => 'finish' }),
+  },
+  {
+    id: 'gadgets',
+    name: 'Gadgets',
+    blurb: 'Plinko, a paddle wheel, a flip-flop see-saw, bumpers and a trampoline',
+    build: () => ({ ...buildObstacles(), expect: null }),
   },
 ];

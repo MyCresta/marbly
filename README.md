@@ -10,8 +10,9 @@ Pick a course, pick a marble, and watch it roll. Nine marble materials share the
 | --- | --- |
 | Vortex | A banked helix feeds a copper vortex funnel at rim level. A copper elbow drops into a ski jump past a desk fan, which pushes light marbles further, so every marble lands in a felt bin that matches its density. |
 | Switchback | Four hairpin rows wind down to the front of the desk and finish on a 30-bar brass xylophone that plays the opening of Ode to Joy. Heavier, easier rolling marbles play it faster. |
-| Loop | A 45° drop into a corkscrew loop, tuned to sit right at the edge of making it. Metals almost always loop, glass usually does, oak and rubber never. Marbles that stall in the dip before the loop drop through a trapdoor into the Fell tray. |
-| Race | Nine lanes, one per marble, a brass starting gate and a stopwatch. Rolling resistance and air drag decide the order. Tungsten and steel win, the rubber ball comes last. |
+| Loop | A 45° drop into a corkscrew loop. From that height every marble has the speed to clear it, as it would on a real track, and the loop runs at a finer physics step so nothing clips through. A trapdoor in the dip catches any marble that stalls there and drops it into the Fell tray. |
+| Race | Nine lanes start high on the left and merge into one wide shared track. Two banked hairpins narrow it step by step, so the marbles bump and jostle for the racing line on the way down to the finish arch. A brass gate starts the race and a stopwatch keeps the order. |
+| Gadgets | A Plinko peg board scatters each marble into a channel that turns a paddle wheel. Below it, a weighted see-saw flips with every marble, sending them alternately left across a board of red pop bumpers or right down a ramp onto a trampoline. |
 
 Switch courses from the picker under the title, with the left and right arrow keys, or by linking straight to one, for example `#loop`.
 
@@ -34,6 +35,8 @@ Density sets mass, which decides how much the fan and air drag can push a marble
 ## Controls
 
 * Space or Enter drops the selected marble
+* Left drag on a marble picks it up. Move it anywhere on the desk and let go to drop it, or flick the mouse as you let go to throw it
+* Left drag anywhere else orbits, right drag pans, scroll or pinch zooms
 * 1 to 9 picks a marble
 * A toggles auto drop, C clears the desk, F toggles follow cam
 * Left and right arrows switch course
@@ -50,12 +53,15 @@ The bars button in the top right cycles between Auto, High, Medium, Low and Mini
 | Minimal | 0.6x | FXAA | refraction shader | lamp 512 px, every 3rd frame |
 
 Low and Minimal also turn off clearcoat and sheen on the materials, and Minimal turns off bloom.
-* Drag to orbit, scroll or pinch to zoom, right drag to pan
+
+## Sound
+
+All sound is synthesised live with the Web Audio API. Each material has its own rolling voice, so metal hisses bright, glass sings a little lower, acrylic is duller, wood rumbles and rubber is a soft low purr. The volume follows how many marbles are rolling and how fast. Collisions ring or knock by material and soften on felt. On the xylophone the marble acts as the mallet: steel and tungsten strike bright and loud, oak gives a soft woody note, rubber a muted thump, and you still hear the marble rolling between the bars.
 
 ## Stack
 
-* [three.js](https://threejs.org) r187 for rendering: physical materials with transmission and dispersion for glass, a scene-captured environment map for reflections, soft shadows, soft shadows and a lightweight two-level bloom
-* [Rapier](https://rapier.rs) 0.21 for rigid-body physics at 240 Hz, with triangle-mesh colliders generated from the same geometry as the visible track
+* [three.js](https://threejs.org) r187 for rendering: physical materials with transmission and dispersion for glass, a scene-captured environment map for reflections, soft shadows and a lightweight two-level bloom
+* [Rapier](https://rapier.rs) 0.21 for rigid-body physics at 240 Hz (480 Hz on the loop), with triangle-mesh colliders generated from the same geometry as the visible track and revolute joints for the wheel and see-saw
 * No build step. Both libraries are vendored in `vendor/` so the site has no runtime CDN dependency.
 * All textures (wood, felt, leather, plaster, marble swirls) are generated procedurally at load time.
 

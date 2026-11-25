@@ -1,3 +1,23 @@
+const ROLL = {
+  metal: { type: 'bandpass', base: 2400, span: 1800, q: 1.6, gain: 0.32 },
+  glass: { type: 'bandpass', base: 1500, span: 1300, q: 1.2, gain: 0.3 },
+  plastic: { type: 'bandpass', base: 900, span: 700, q: 0.9, gain: 0.26 },
+  wood: { type: 'lowpass', base: 300, span: 420, q: 1.1, gain: 0.42 },
+  rubber: { type: 'lowpass', base: 160, span: 200, q: 0.7, gain: 0.22 },
+};
+
+const MALLET = {
+  metal: { bright: 1, click: 5200, clickGain: 0.5, decay: 1.2, level: 1 },
+  glass: { bright: 0.85, click: 4200, clickGain: 0.45, decay: 1.1, level: 0.9 },
+  plastic: { bright: 0.45, click: 2200, clickGain: 0.3, decay: 0.9, level: 0.7 },
+  wood: { bright: 0.25, click: 1100, clickGain: 0.55, decay: 0.7, level: 0.6 },
+  rubber: { bright: 0.05, click: 380, clickGain: 0.4, decay: 0.35, level: 0.35 },
+};
+
+export function voiceKind(typeId) {
+  return (VOICES[typeId] || VOICES.catseye).kind;
+}
+
 const VOICES = {
   catseye: { kind: 'glass', pitch: 3100 },
   aurora: { kind: 'glass', pitch: 2800 },
@@ -50,7 +70,8 @@ export class SoundBoard {
     }
     this.noiseBuffer = nb;
 
-    this.roll = this.loopNoise(260, 0.9, 'lowpass');
+    this.rolls = {};
+    for (const [kind, r] of Object.entries(ROLL)) this.rolls[kind] = this.loopNoise(r.base, r.q, r.type);
     this.whirr = this.loopNoise(1400, 3, 'bandpass');
     this.fanNoise = this.loopNoise(500, 0.6, 'lowpass');
     const hum = ctx.createOscillator();
@@ -153,6 +174,44 @@ export class SoundBoard {
     src.start(t, Math.random() * 1.5, len + 0.02);
   }
 
+  bumper(pan = 0, distance = 1) {
+    if (!this.ctx || !this.enabled || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.002;
+    const out = ctx.createGain();
+    out.gain.value = 0.32 / (0.6 + distance * 0.8);
+    const panner = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (panner) {
+      panner.pan.value = Math.max(-1, Math.min(1, pan));
+      out.connect(panner).connect(this.master);
+      panner.connect(this.verb);
+    } else {
+      out.connect(this.master);
+    }
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(1050, t);
+    o.frequency.exponentialRampToValueAtTime(520, t + 0.08);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.7, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(g).connect(out);
+    o.start(t);
+    o.stop(t + 0.2);
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 260;
+    f.Q.value = 1.2;
+    const n = ctx.createGain();
+    n.gain.setValueAtTime(1.4, t);
+    n.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    src.connect(f).connect(n).connect(out);
+    src.start(t, Math.random() * 1.5, 0.07);
+  }
+
   tick(distance) {
     if (!this.ctx || !this.enabled || this.ctx.state !== 'running') return;
     const ctx = this.ctx;
@@ -170,12 +229,14 @@ export class SoundBoard {
     src.start(t, Math.random(), 0.04);
   }
 
-  note(freq, strength, pan = 0, distance = 1) {
+  note(freq, strength, pan = 0, distance = 1, typeId = 'steel', mass = 0.03) {
     if (!this.ctx || !this.enabled || this.ctx.state !== 'running') return;
     const ctx = this.ctx;
     const t = ctx.currentTime + 0.002;
+    const mallet = MALLET[voiceKind(typeId)];
+    const weight = Math.min(1.3, 0.55 + Math.sqrt(mass / 0.03) * 0.45);
     const out = ctx.createGain();
-    out.gain.value = Math.min(0.5, 0.12 + strength * 0.35) / (0.6 + distance * 0.7);
+    out.gain.value = Math.min(0.55, (0.1 + strength * 0.35) * mallet.level * weight) / (0.6 + distance * 0.7);
     const panner = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     if (panner) {
       panner.pan.value = Math.max(-1, Math.min(1, pan));
@@ -184,27 +245,44 @@ export class SoundBoard {
     } else {
       out.connect(this.master);
     }
-    [[1, 1, 1.1], [2.76, 0.28, 0.35], [5.4, 0.12, 0.15], [4, 0.05, 0.3]].forEach(([ratio, amp, decay]) => {
+    const b = mallet.bright;
+    [[1, 1, 1.1], [2.76, 0.32 * b, 0.35], [5.4, 0.16 * b * b, 0.15], [4, 0.06 * b, 0.3]].forEach(([ratio, amp, decay]) => {
       const f = freq * ratio;
-      if (f > ctx.sampleRate * 0.4) return;
+      if (f > ctx.sampleRate * 0.4 || amp < 0.004) return;
       const o = ctx.createOscillator();
       o.type = 'sine';
       o.frequency.value = f;
       const g = ctx.createGain();
+      const d = decay * mallet.decay;
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(amp, t + 0.002);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+      g.gain.linearRampToValueAtTime(amp, t + (b < 0.2 ? 0.006 : 0.002));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
       o.connect(g).connect(out);
       o.start(t);
-      o.stop(t + decay + 0.05);
+      o.stop(t + d + 0.05);
     });
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = mallet.click;
+    f.Q.value = 1.4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(mallet.clickGain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.025);
+    src.connect(f).connect(g).connect(out);
+    src.start(t, Math.random() * 1.5, 0.04);
   }
 
-  ambient({ rolling = 0, rollPitch = 1, funnel = 0, fan = 0, fanDistance = 1 }) {
+  ambient({ rolling = {}, funnel = 0, fan = 0, fanDistance = 1 }) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.roll.gain.gain.setTargetAtTime(Math.min(0.5, rolling * 0.35), t, 0.06);
-    this.roll.filter.frequency.setTargetAtTime(180 + rollPitch * 420, t, 0.1);
+    for (const [kind, r] of Object.entries(ROLL)) {
+      const voice = this.rolls[kind];
+      const st = rolling[kind] || { amount: 0, speed: 0 };
+      voice.gain.gain.setTargetAtTime(Math.min(0.55, st.amount * r.gain), t, 0.06);
+      voice.filter.frequency.setTargetAtTime(r.base + Math.min(1.5, st.speed) * r.span, t, 0.1);
+    }
     this.whirr.gain.gain.setTargetAtTime(Math.min(0.12, funnel * 0.06), t, 0.08);
     this.whirr.filter.frequency.setTargetAtTime(900 + funnel * 900, t, 0.1);
     const fv = fan / (0.5 + fanDistance);

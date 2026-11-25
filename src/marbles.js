@@ -33,7 +33,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'oak',
-    rolling: 5.4,
+    rolling: 5.0,
     name: 'Oak',
     substance: 'Turned white oak',
     density: 750,
@@ -43,7 +43,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'rubber',
-    rolling: 7.5,
+    rolling: 4.7,
     name: 'Super Ball',
     substance: 'Polybutadiene rubber',
     density: 1150,
