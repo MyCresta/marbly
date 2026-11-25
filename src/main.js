@@ -15,10 +15,10 @@ import { mergeStatic } from './optimize.js';
 
 const MAX_MARBLES = 48;
 const QUALITY = {
-  high: { label: 'High', scale: 1.5, msaa: 4, fxaa: false, dof: true, bloom: true, bloomScale: 0.5, glass: 'real', spot: 2048, moon: true, shadowEvery: 1, simple: false },
-  medium: { label: 'Medium', scale: 1.0, msaa: 0, fxaa: true, dof: true, bloom: true, bloomScale: 0.35, glass: 'fake', spot: 1024, moon: false, shadowEvery: 1, simple: false },
-  low: { label: 'Low', scale: 0.8, msaa: 0, fxaa: true, dof: false, bloom: true, bloomScale: 0.25, glass: 'fake', spot: 1024, moon: false, shadowEvery: 2, simple: true },
-  minimal: { label: 'Minimal', scale: 0.6, msaa: 0, fxaa: true, dof: false, bloom: false, bloomScale: 0.25, glass: 'fake', spot: 512, moon: false, shadowEvery: 3, simple: true },
+  high: { label: 'High', scale: 1.5, msaa: 4, fxaa: false, bloom: true, glass: 'real', spot: 2048, moon: true, shadowEvery: 1, simple: false },
+  medium: { label: 'Medium', scale: 1.0, msaa: 0, fxaa: true, bloom: true, glass: 'fake', spot: 1024, moon: false, shadowEvery: 1, simple: false },
+  low: { label: 'Low', scale: 0.8, msaa: 0, fxaa: true, bloom: true, glass: 'fake', spot: 1024, moon: false, shadowEvery: 2, simple: true },
+  minimal: { label: 'Minimal', scale: 0.6, msaa: 0, fxaa: true, bloom: false, glass: 'fake', spot: 512, moon: false, shadowEvery: 3, simple: true },
 };
 const LEVELS = ['high', 'medium', 'low', 'minimal'];
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
@@ -52,7 +52,7 @@ async function boot() {
   const room = buildRoom(mats);
   scene.add(room.group);
 
-  const hemi = new THREE.HemisphereLight(0xe6d2b6, 0x3a281c, 0.5);
+  const hemi = new THREE.HemisphereLight(0xf0d6b4, 0x3a281c, 0.62);
   scene.add(hemi);
   const moon = new THREE.DirectionalLight(0xa9bcff, 1.0);
   moon.position.set(room.window.cx + 0.3, 1.6, -2.0);
@@ -67,9 +67,6 @@ async function boot() {
   const fill = new THREE.PointLight(0xffc896, 3.0, 7, 1.3);
   fill.position.set(1.0, 1.15, 1.3);
   scene.add(fill);
-  const wash = new THREE.PointLight(0xffb070, 0.9, 1.8, 1.4);
-  wash.position.set(-0.35, 0.95, -0.12);
-  scene.add(wash);
 
   const factory = new MarbleFactory();
   const sound = new SoundBoard();
@@ -215,6 +212,7 @@ async function boot() {
     scene.environmentIntensity = 1.25;
 
     simplifyMaterials(scene, quality.current.simple);
+    warmShaders();
     ui.setCourse(course);
     try { localStorage.setItem('marbly.course', course.id); } catch { }
     if (location.hash.slice(1) !== course.id) history.replaceState(null, '', `#${course.id}`);
@@ -228,6 +226,23 @@ async function boot() {
     } else {
       setView('overview');
     }
+  };
+
+  let warmTimer = 0;
+  const warmShaders = () => {
+    clearTimeout(warmTimer);
+    warmTimer = setTimeout(() => {
+      const holder = new THREE.Group();
+      holder.position.set(0, -0.6, 0);
+      MARBLE_TYPES.forEach((t) => holder.add(factory.create(t, 0)));
+      scene.add(holder);
+      const done = () => scene.remove(holder);
+      if (renderer.compileAsync) renderer.compileAsync(scene, camera).then(done, done);
+      else {
+        renderer.compile(scene, camera);
+        done();
+      }
+    }, 50);
   };
 
   const spawnAt = (type, pos) => {
@@ -383,21 +398,27 @@ async function boot() {
     mode: 'auto',
     level: 'medium',
     current: QUALITY.medium,
-    ceiling: 0,
+    ceiling: 1,
+    dyn: 1,
     windowStart: 0,
     frames: 0,
     settle: 1.5,
     good: 0,
+    bad: 0,
     lastUp: -1e9,
     fps: 0,
+    setResolution() {
+      const dyn = this.mode === 'auto' ? this.dyn : 1;
+      pixelRatio = Math.min(window.devicePixelRatio || 1, this.current.scale) * dyn;
+      resize();
+    },
     apply(level) {
       const q = QUALITY[level];
       this.level = level;
       this.current = q;
-      pixelRatio = Math.min(window.devicePixelRatio || 1, q.scale);
-      post.configure({ msaa: q.msaa, fxaa: q.fxaa, dof: q.dof, bloom: q.bloom, bloomScale: q.bloomScale });
+      post.configure({ msaa: q.msaa, fxaa: q.fxaa, bloom: q.bloom });
       simplifyMaterials(scene, q.simple);
-      resize();
+      this.setResolution();
       renderer.transmissionResolutionScale = 0.5;
       factory.setGlassMode(q.glass, state.marbles.map((m) => m.mesh));
       const spot = room.lamp.spot;
@@ -411,24 +432,30 @@ async function boot() {
       moon.castShadow = q.moon;
       renderer.shadowMap.autoUpdate = q.shadowEvery === 1;
       renderer.shadowMap.needsUpdate = true;
+      warmShaders();
       this.settle = 1.5;
       this.frames = 0;
       this.windowStart = 0;
       this.good = 0;
-      ui.setQuality(this.mode, q.label, this.fps);
+      this.bad = 0;
+      this.label();
+    },
+    label() {
+      ui.setQuality(this.mode, this.current.label, this.fps, this.mode === 'auto' ? this.dyn : 1);
     },
     setMode(mode) {
       this.mode = mode;
       try { localStorage.setItem('marbly.quality', mode); } catch { }
       if (mode === 'auto') {
-        this.ceiling = 0;
-        this.apply(this.level);
+        this.ceiling = 1;
+        this.dyn = 1;
+        this.apply(LEVELS[Math.max(1, LEVELS.indexOf(this.level))]);
       } else {
         this.apply(mode);
       }
     },
     tick(now, dt) {
-      if (dt > 0.2) {
+      if (dt > 1) {
         this.windowStart = 0;
         return;
       }
@@ -443,27 +470,44 @@ async function boot() {
       }
       this.frames++;
       const span = (now - this.windowStart) / 1000;
-      if (span < 1) return;
+      if (span < 0.6) return;
       this.fps = this.frames / span;
       this.windowStart = now;
       this.frames = 0;
-      ui.setQuality(this.mode, this.current.label, this.fps);
+      this.label();
       if (this.mode !== 'auto') return;
       const i = LEVELS.indexOf(this.level);
-      if (this.fps < 40 && i < LEVELS.length - 1) {
-        if (now - this.lastUp < 8000) this.ceiling = i + 1;
-        this.apply(LEVELS[i + 1]);
+      if (this.fps < 50) {
+        this.good = 0;
+        if (this.dyn > 0.6) {
+          this.dyn = Math.max(0.6, this.dyn * (this.fps < 35 ? 0.8 : 0.9));
+          this.setResolution();
+          this.settle = 0.3;
+        } else if (++this.bad >= 2 && i < LEVELS.length - 1) {
+          if (now - this.lastUp < 8000) this.ceiling = i + 1;
+          this.dyn = 0.8;
+          this.apply(LEVELS[i + 1]);
+        }
       } else if (this.fps > 57) {
+        this.bad = 0;
         this.good++;
-        if (this.good >= 4 && i > this.ceiling) {
+        if (this.good >= 3 && this.dyn < 1) {
+          this.dyn = Math.min(1, this.dyn * 1.06);
+          this.setResolution();
+          this.good = 0;
+          this.settle = 0.3;
+        } else if (this.good >= 6 && this.dyn >= 1 && i > this.ceiling) {
           this.lastUp = now;
+          this.dyn = 0.8;
           this.apply(LEVELS[i - 1]);
         }
       } else {
         this.good = 0;
+        this.bad = 0;
       }
     },
   };
+
 
   ui.init({
     types: MARBLE_TYPES,
@@ -524,7 +568,6 @@ async function boot() {
   let last = performance.now();
   let acc = 0;
   let elapsed = 0;
-  let focus = camera.position.distanceTo(controls.target);
   let frameCount = 0;
   const tmpV = new THREE.Vector3();
   const tmpSize = new THREE.Vector2();
@@ -540,13 +583,13 @@ async function boot() {
       const gl = renderer.getContext();
       renderer.info.autoReset = false;
       renderer.info.reset();
-      post.render(elapsed, focus);
+      post.render(elapsed);
       gl.finish();
       const calls = renderer.info.render.calls;
       const tris = renderer.info.render.triangles;
       renderer.info.autoReset = true;
       const t0 = performance.now();
-      for (let i = 0; i < frames; i++) post.render(elapsed + i * 0.016, focus);
+      for (let i = 0; i < frames; i++) post.render(elapsed + i * 0.016);
       gl.finish();
       const render = (performance.now() - t0) / frames;
       const p0 = performance.now();
@@ -565,11 +608,12 @@ async function boot() {
   }, 900);
 
   function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const rawDt = (now - last) / 1000;
+    const dt = Math.min(0.05, rawDt);
     last = now;
     elapsed += dt;
 
-    quality.tick(now, dt);
+    quality.tick(now, rawDt);
     frameCount++;
     if (!renderer.shadowMap.autoUpdate && frameCount % quality.current.shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
 
@@ -713,9 +757,7 @@ async function boot() {
     controls.update();
     camera.position.clamp(roomMin, roomMax);
 
-    const fd = state.view === 'follow' && state.follow ? camera.position.distanceTo(state.follow.mesh.position) : camera.position.distanceTo(controls.target);
-    focus += (fd - focus) * (1 - Math.exp(-dt * 6));
-    post.render(elapsed, focus);
+    post.render(elapsed);
     ui.tick(dt);
     requestAnimationFrame(frame);
   }

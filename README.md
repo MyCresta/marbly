@@ -40,21 +40,21 @@ Density sets mass, which decides how much the fan and air drag can push a marble
 
 ## Graphics quality
 
-The bars button in the top right cycles between Auto, High, Medium, Low and Minimal. Auto starts at Medium (Low on touch devices), measures the frame rate every second, steps down whenever it drops under 40 fps and steps back up after a few seconds above 57 fps. The choice is remembered.
+The bars button in the top right cycles between Auto, High, Medium, Low and Minimal, and the choice is remembered. Auto starts at Medium (Low on touch devices) and scales the render resolution smoothly between 60% and 100% to hold close to 60 fps. It only drops a whole level if even 60% resolution is not enough, and never raises itself to High. Hover the button to see the frame rate and current resolution.
 
-| Level | Resolution | Anti-aliasing | Depth of field | Glass | Shadows |
-| --- | --- | --- | --- | --- | --- |
-| High | up to 1.5x | 4x MSAA | yes | real transmission | lamp 2048 px plus moonlight |
-| Medium | up to 1x | FXAA | yes | refraction shader | lamp 1024 px |
-| Low | 0.8x | FXAA | no | refraction shader | lamp 1024 px, every 2nd frame |
-| Minimal | 0.6x | FXAA | no | refraction shader | lamp 512 px, every 3rd frame |
+| Level | Resolution | Anti-aliasing | Glass | Shadows |
+| --- | --- | --- | --- | --- |
+| High | up to 1.5x | 4x MSAA | real transmission | lamp 2048 px plus moonlight |
+| Medium | up to 1x | FXAA | refraction shader | lamp 1024 px |
+| Low | 0.8x | FXAA | refraction shader | lamp 1024 px, every 2nd frame |
+| Minimal | 0.6x | FXAA | refraction shader | lamp 512 px, every 3rd frame |
 
-Low and Minimal also turn off clearcoat and sheen on the materials. Hover the button to see the current frame rate.
+Low and Minimal also turn off clearcoat and sheen on the materials, and Minimal turns off bloom.
 * Drag to orbit, scroll or pinch to zoom, right drag to pan
 
 ## Stack
 
-* [three.js](https://threejs.org) r187 for rendering: physical materials with transmission and dispersion for glass, a scene-captured environment map for reflections, soft shadows, a custom depth of field pass and bloom
+* [three.js](https://threejs.org) r187 for rendering: physical materials with transmission and dispersion for glass, a scene-captured environment map for reflections, soft shadows, soft shadows and a lightweight two-level bloom
 * [Rapier](https://rapier.rs) 0.21 for rigid-body physics at 240 Hz, with triangle-mesh colliders generated from the same geometry as the visible track
 * No build step. Both libraries are vendored in `vendor/` so the site has no runtime CDN dependency.
 * All textures (wood, felt, leather, plaster, marble swirls) are generated procedurally at load time.

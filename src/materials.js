@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MARBLE_RADIUS } from './marbles.js';
 import { woodTextures, noiseSurface, swirlTexture, speckleTexture } from './textures.js';
 
@@ -52,7 +53,7 @@ export function createSceneMaterials() {
     fairy: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffb562, emissiveIntensity: 9 }),
     wire: new THREE.MeshStandardMaterial({ color: 0x2a2520, roughness: 0.6 }),
     glassPane: new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 0, roughness: 0.02, transparent: true, opacity: 0.08, envMapIntensity: 1.2 }),
-    curtain: new THREE.MeshPhysicalMaterial({ color: 0xe9dcc4, roughness: 0.9, sheen: 0.6, sheenColor: new THREE.Color('#fff1da'), transparent: true, opacity: 0.86, side: THREE.DoubleSide }),
+    curtain: new THREE.MeshStandardMaterial({ color: 0xe6d8bf, roughness: 0.92, side: THREE.DoubleSide, emissive: 0x3a2a1a, emissiveIntensity: 0.35 }),
     candle: new THREE.MeshStandardMaterial({ color: 0xf3e6cf, roughness: 0.6, emissive: 0xff9a40, emissiveIntensity: 0.15 }),
     flame: new THREE.MeshBasicMaterial({ color: 0xffc070 }),
     ceramicDark: new THREE.MeshPhysicalMaterial({ color: 0x2f4a46, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 }),
@@ -155,7 +156,7 @@ export class MarbleFactory {
   constructor() {
     this.sphere = new THREE.SphereGeometry(R, 48, 32);
     this.core = new THREE.SphereGeometry(R * 0.86, 32, 20);
-    this.vanes = vaneGeometry(3);
+    this.vanes = [mergeGeometries(vaneGeometry(3))];
     this.auroraTextures = AURORA_PALETTES.map((colors, i) => swirlTexture({ w: 512, h: 256, seed: 10 + i, colors }));
     const oakTex = woodTextures({ w: 512, h: 256, seed: 71, dark: '#8a5f36', light: '#d2a873', rings: 6, warp: 1.8, roughBase: 0.5 });
     this.mats = {

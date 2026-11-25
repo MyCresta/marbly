@@ -107,9 +107,10 @@ export function createUI() {
       const btn = document.querySelectorAll('.marble')[i];
       if (btn) btn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
     },
-    setQuality(mode, label, fps) {
+    setQuality(mode, label, fps, scale = 1) {
       $('#quality-label').textContent = mode === 'auto' ? `Auto · ${label}` : label;
-      $('#quality').title = `Graphics quality${fps ? `, ${Math.round(fps)} fps` : ''}. Click to change.`;
+      const res = scale < 0.999 ? `, ${Math.round(scale * 100)}% resolution` : '';
+      $('#quality').title = `Graphics quality${fps ? `, ${Math.round(fps)} fps` : ''}${res}. Click to change.`;
     },
     setCourse(course) {
       $('#course-name').textContent = course.name;
