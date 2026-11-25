@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { artPrintTexture, bookSpineTexture, makeNoise } from './textures.js';
+import { buildClock, buildPinboard, buildSteam, buildDustMotes, buildPencilCup, buildGlasses, buildCable, contactShadow } from './decor.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -28,7 +29,7 @@ function cylinderBetween(a, b, r, seg = 16, mat) {
   return m;
 }
 
-const ROOM = { back: -0.8, left: -1.7, right: 1.9, front: 3.2, floor: -0.76, ceiling: 1.7 };
+const ROOM = { back: -0.465, left: -1.7, right: 1.9, front: 3.2, floor: -0.76, ceiling: 1.7 };
 
 function skyMaterial() {
   return new THREE.ShaderMaterial({
@@ -63,6 +64,21 @@ function skyMaterial() {
         float on = step(0.86, h(li)) * step(y, ridge - 0.03);
         float d = length(fract(lg) - 0.5 - (vec2(h(li + 3.0), h(li + 7.0)) - 0.5) * 0.6);
         col += vec3(1.8, 1.1, 0.55) * on * smoothstep(0.18, 0.0, d) * (0.6 + 0.4 * sin(time * 0.7 + h(li) * 40.0));
+        float cl = 0.0;
+        vec2 cp = vec2(vUv.x * 3.0 + time * 0.004, vUv.y * 7.0);
+        float amp = 0.5;
+        for (int i = 0; i < 4; i++) {
+          vec2 ip = floor(cp);
+          vec2 fp = fract(cp);
+          fp = fp * fp * (3.0 - 2.0 * fp);
+          float nv = mix(mix(h(ip), h(ip + vec2(1.0, 0.0)), fp.x), mix(h(ip + vec2(0.0, 1.0)), h(ip + vec2(1.0, 1.0)), fp.x), fp.y);
+          cl += nv * amp;
+          cp *= 2.03;
+          amp *= 0.5;
+        }
+        float band = smoothstep(0.32, 0.5, y) * smoothstep(0.82, 0.55, y);
+        float cloud = smoothstep(0.52, 0.8, cl) * band;
+        col = mix(col, vec3(0.42, 0.3, 0.4) + vec3(0.5, 0.25, 0.12) * smoothstep(0.6, 0.3, y), cloud * 0.55);
         vec2 mp = (vUv - vec2(0.72, 0.62)) * vec2(1.6, 1.0);
         float moon = smoothstep(0.045, 0.04, length(mp));
         col += vec3(1.8, 1.7, 1.5) * moon + vec3(0.25, 0.25, 0.35) * smoothstep(0.25, 0.0, length(mp));
@@ -186,11 +202,33 @@ export function buildRoom(mats) {
     cp.setZ(i, Math.sin(x * 52) * 0.018 + Math.sin(x * 23 + 1) * 0.01);
   }
   curtainGeo.computeVertexNormals();
-  for (const side of [-1, 1]) {
-    const c = mesh(curtainGeo, mats.curtain);
+  const curtains = [-1, 1].map((side) => {
+    const geo = curtainGeo.clone();
+    const base = Float32Array.from(geo.attributes.position.array);
+    const c = mesh(geo, mats.curtain);
     c.position.set(win.cx + side * (win.w / 2 + 0.16), win.cy + 0.06, ROOM.back + 0.06);
     group.add(c);
-  }
+    return { geo, base, side };
+  });
+  let curtainClock = 0;
+  anim.push((t, dt) => {
+    curtainClock += dt;
+    if (curtainClock < 1 / 30) return;
+    curtainClock = 0;
+    for (const c of curtains) {
+      const pos = c.geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = c.base[i * 3];
+        const yv = c.base[i * 3 + 1];
+        const low = Math.max(0, 0.5 - yv / 1.28);
+        const sway = Math.sin(t * 0.7 + x * 9 + c.side) * 0.006 + Math.sin(t * 1.9 + x * 23) * 0.002;
+        pos.setZ(i, c.base[i * 3 + 2] + sway * low * 2);
+        pos.setX(i, x + Math.sin(t * 0.5 + c.side * 2) * 0.004 * low);
+      }
+      pos.needsUpdate = true;
+      c.geo.computeVertexNormals();
+    }
+  });
   const rod = cylinderBetween(V(win.cx - 0.7, win.cy + 0.71, ROOM.back + 0.07), V(win.cx + 0.7, win.cy + 0.71, ROOM.back + 0.07), 0.008, 16, mats.brass);
   group.add(rod);
 
@@ -200,8 +238,8 @@ export function buildRoom(mats) {
   const bookColors = ['#7a2f2a', '#28405e', '#c79a3a', '#2f4d3a', '#e6dcc6', '#5c3b2a', '#8c6c4a', '#3b2f45', '#a84d32', '#6a7b6b'];
   const bookMats = bookColors.map((c) => new THREE.MeshStandardMaterial({ color: c, map: spine, roughness: 0.75 }));
   const shelves = [
-    { y: 0.6, x0: -1.25, x1: -0.3 },
-    { y: 0.98, x0: -1.25, x1: -0.3 },
+    { y: 0.88, x0: -1.25, x1: -0.36 },
+    { y: 1.25, x0: -1.25, x1: -0.36 },
   ];
   for (const s of shelves) {
     const w = s.x1 - s.x0;
@@ -278,7 +316,7 @@ export function buildRoom(mats) {
     group.add(g);
     return g;
   };
-  makePlant(0.74, 0, -0.3, 1.25, 11, 5);
+  makePlant(0.8, 0, -0.3, 1.25, 11, 5);
   makePlant(-0.4, shelves[1].y + 0.014, ROOM.back + 0.1, 0.8, 8, 9);
 
   const candle = new THREE.Group();
@@ -312,11 +350,12 @@ export function buildRoom(mats) {
   const print = mesh(new THREE.PlaneGeometry(fw - 0.05, fh - 0.05), new THREE.MeshStandardMaterial({ map: artPrintTexture(), roughness: 0.8 }));
   print.position.z = 0.0105;
   art.add(print);
-  art.position.set(0.18, 0.9, ROOM.back + 0.012);
+  art.scale.setScalar(0.8);
+  art.position.set(0.29, 0.98, ROOM.back + 0.012);
   art.rotation.z = 0.012;
   group.add(art);
 
-  const fairy = buildFairyLights(mats, V(-1.4, 1.24, ROOM.back + 0.02), V(1.6, 1.27, ROOM.back + 0.02));
+  const fairy = buildFairyLights(mats, V(-1.4, 1.5, ROOM.back + 0.02), V(1.6, 1.53, ROOM.back + 0.02));
   group.add(fairy.group);
   anim.push(fairy.update);
 
@@ -327,6 +366,47 @@ export function buildRoom(mats) {
   mug.position.set(0.76, 0, 0.27);
   mug.rotation.y = -0.6;
   group.add(mug);
+  const steam = buildSteam();
+  steam.group.position.set(0.76, 0.075, 0.27);
+  group.add(steam.group);
+  anim.push((t) => steam.update(t));
+
+  const clock = buildClock(mats);
+  clock.group.position.set(-0.07, 1.1, ROOM.back + 0.012);
+  group.add(clock.group);
+  const pinboard = buildPinboard(mats);
+  pinboard.position.set(-0.07, 0.72, ROOM.back + 0.008);
+  pinboard.rotation.z = -0.008;
+  group.add(pinboard);
+
+  const cup = buildPencilCup(mats);
+  cup.position.set(-0.78, 0, 0.07);
+  group.add(cup);
+  const glasses = buildGlasses(mats);
+  glasses.position.set(0.66, 0, 0.39);
+  glasses.rotation.y = 0.5;
+  group.add(glasses);
+  const lampBase = lamp.base;
+  group.add(buildCable([
+    V(lampBase.x + 0.05, 0.004, lampBase.z - 0.04),
+    V(lampBase.x + 0.08, 0.003, lampBase.z - 0.09),
+    V(lampBase.x + 0.07, 0.003, ROOM.back + 0.01),
+    V(lampBase.x + 0.06, -0.05, ROOM.back + 0.006),
+    V(lampBase.x + 0.05, -0.35, ROOM.back + 0.006),
+  ], mats));
+  const motes = buildDustMotes(lamp.head, lamp.target);
+  group.add(motes.points);
+  anim.push((t, dt, ps) => motes.update(t, dt, ps));
+
+  [
+    [0.76, 0.27, 0.06, 0.06, 0.6],
+    [cup.position.x, cup.position.z, 0.05, 0.05, 0.6],
+    [0.8, -0.3, 0.1, 0.1, 0.5],
+    [lampBase.x, lampBase.z, 0.12, 0.12, 0.5],
+    [-0.76, 0.33, 0.12, 0.15, 0.4, 0.2],
+    [0.78, -0.1, 0.17, 0.13, 0.45, -0.25],
+    [0.66, 0.39, 0.07, 0.03, 0.3, 0.5],
+  ].forEach(([x, z, rx, rz, o, r]) => group.add(contactShadow(x, z, rx, rz, o, r || 0)));
 
   const notebook = new THREE.Group();
   const cover = mesh(new RoundedBoxGeometry(0.15, 0.018, 0.21, 2, 0.004), new THREE.MeshPhysicalMaterial({ color: 0x5b2f22, roughness: 0.55, sheen: 0.4, sheenColor: new THREE.Color('#9a5a40') }));
@@ -353,8 +433,8 @@ export function buildRoom(mats) {
   pen.position.set(0.02, 0.024, 0.02);
   pen.rotation.y = 0.5;
   notebook.add(pen);
-  notebook.position.set(-0.7, 0, 0.27);
-  notebook.rotation.y = 0.35;
+  notebook.position.set(-0.76, 0, 0.33);
+  notebook.rotation.y = 0.2;
   group.add(notebook);
 
   const books = new THREE.Group();
@@ -364,7 +444,7 @@ export function buildRoom(mats) {
     b.rotation.y = [0, 0.12, -0.08][i];
     books.add(b);
   });
-  books.position.set(0.7, 0, -0.08);
+  books.position.set(0.78, 0, -0.1);
   books.rotation.y = -0.25;
   group.add(books);
 
@@ -373,8 +453,9 @@ export function buildRoom(mats) {
     lamp,
     window: win,
     room: ROOM,
-    update(t) {
-      for (const f of anim) f(t);
+    clock,
+    update(t, dt = 0.016, pixelScale = 4) {
+      for (const f of anim) f(t, dt, pixelScale);
     },
   };
 }
@@ -477,7 +558,7 @@ function buildLamp(mats) {
   const glow = new THREE.PointLight(0xffbf80, 0.25, 0.8, 2);
   glow.position.copy(head).addScaledVector(dir, 0.08);
   group.add(glow);
-  return { group, spot, head };
+  return { group, spot, head, target, base };
 }
 
 function buildMug(mats) {

@@ -1,78 +1,84 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-import { buildCourse, LAYOUT } from '../src/course.js';
+import { COURSES } from '../src/courses/index.js';
 import { Physics, STEP } from '../src/physics.js';
-import { MARBLE_TYPES, densityClass } from '../src/marbles.js';
+import { MARBLE_TYPES } from '../src/marbles.js';
 
 await RAPIER.init();
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.split('=')));
-if (args.wind) LAYOUT.wind.strength = Number(args.wind);
-const course = buildCourse();
-console.log('rim clearance', course.diagnostics.rimClearance.toFixed(4));
+const entry = COURSES.find((c) => c.id === (args.course || 'vortex'));
+const course = entry.build();
+const f = (n, d = 2) => (n === null || n === undefined || !Number.isFinite(n) ? '  -  ' : n.toFixed(d));
 
-function binOf(x) {
-  for (const b of course.bins) if (x >= b.x0 && x < b.x1) return b.id;
+function binOf(p) {
+  for (const b of course.bins) if (p.x >= b.x0 && p.x < b.x1 && p.z >= b.z0 && p.z < b.z1 && p.y < 0.1) return b.id;
   return 'none';
 }
 
-function runSingle(type, jitter = 0) {
+function spawnPoint(typeIndex) {
+  return course.spawnFor ? course.spawnFor(typeIndex) : course.spawn;
+}
+
+function runSingle(type, typeIndex, jitter = 0) {
   const phys = new Physics(RAPIER, course);
-  if (args.drag) phys.drag = Number(args.drag);
-  const s = course.spawn;
+  if (course.gate) phys.setGate(true);
+  const s = spawnPoint(typeIndex);
   const m = phys.addMarble(type, { x: s.x + jitter, y: s.y, z: s.z + jitter * 0.5 });
-  const F = course.funnel;
-  const rec = { funnelT: null, neckT: null, launchT: null, launchV: null, landX: null, landT: null, maxSpeed: 0, helixSpeed: 0, connSpeed: 0, minY: Infinity };
+  const stages = {};
   let t = 0;
-  let restTime = 0;
-  while (t < 25) {
+  let rest = 0;
+  let maxSpeed = 0;
+  let speedSum = 0;
+  let speedN = 0;
+  let finish = null;
+  while (t < 40) {
     phys.step();
     t += STEP;
     const p = m.body.translation();
     const v = m.body.linvel();
     const sp = Math.hypot(v.x, v.y, v.z);
-    rec.maxSpeed = Math.max(rec.maxSpeed, sp);
-    const rf = Math.hypot(p.x - F.x, p.z - F.z);
-    if (rec.funnelT === null && rf < F.rim && p.y < F.top + 0.03 && p.y > F.top - 0.1) rec.funnelT = t;
-    if (rec.funnelT === null && p.y < 0.5 && p.y > 0.45) rec.helixSpeed = Math.max(rec.helixSpeed, sp);
-    if (rec.funnelT === null && p.x > -0.1 && p.x < 0.1 && p.y > 0.3) rec.connSpeed = sp;
-    if (rec.funnelT !== null && rec.neckT === null && p.y < F.bowlY(F.hole) - F.neck) rec.neckT = t;
-    if (rec.neckT !== null && rec.launchT === null && p.z > LAYOUT.chute.launchZ) { rec.launchT = t; rec.launchV = { ...v }; rec.launchY = p.y; }
-    if (rec.launchT !== null && rec.landX === null && p.y < 0.064) { rec.landX = p.x; rec.landZ = p.z; rec.landT = t - rec.launchT; }
-    if (sp < 0.01) restTime += STEP; else restTime = 0;
-    if (restTime > 0.6 || p.y < -0.5) break;
+    maxSpeed = Math.max(maxSpeed, sp);
+    if (p.y > 0.05) { speedSum += sp; speedN++; }
+    for (const st of course.stages || []) if (stages[st.id] === undefined && st.test(p)) stages[st.id] = t;
+    if (course.finishTest && finish === null && course.finishTest(p, typeIndex)) finish = t;
+    rest = sp < 0.01 ? rest + STEP : 0;
+    if ((rest > 0.8 && t > 1.5) || p.y < -0.6) break;
   }
   const p = m.body.translation();
-  rec.final = { x: p.x, y: p.y, z: p.z };
-  rec.bin = binOf(p.x);
-  rec.t = t;
-  return rec;
+  return { t, stages, maxSpeed, avgSpeed: speedSum / Math.max(1, speedN), final: { x: p.x, y: p.y, z: p.z }, bin: binOf(p), finish };
 }
 
-const f = (n, d = 3) => (n === null || n === undefined ? '  -  ' : n.toFixed(d));
 const types = args.type ? MARBLE_TYPES.filter((t) => t.id === args.type) : MARBLE_TYPES;
 const reps = Number(args.reps || 1);
+let ok = 0;
+let total = 0;
 for (const type of types) {
+  const ti = MARBLE_TYPES.indexOf(type);
   for (let r = 0; r < reps; r++) {
-    const rec = runSingle(type, (r - (reps - 1) / 2) * 0.004);
-    const dx = rec.landX === null ? null : rec.landX - course.funnel.x;
-    const ok = rec.bin === densityClass(type.density) ? 'ok ' : 'BAD';
-    console.log(
-      `${ok} ${type.id.padEnd(9)} helixV ${f(rec.helixSpeed, 2)} connV ${f(rec.connSpeed, 2)} funnel@${f(rec.funnelT, 2)} neck@${f(rec.neckT, 2)} launchV ${rec.launchV ? f(rec.launchV.z, 2) + '/' + f(rec.launchV.y, 2) + '/' + f(rec.launchV.x, 2) : '-'} flight ${f(rec.landT, 3)} dx ${f(dx)} landZ ${f(rec.landZ)} final ${f(rec.final.x)},${f(rec.final.y)},${f(rec.final.z)} bin ${rec.bin} t ${f(rec.t, 1)}`,
-    );
+    const rec = runSingle(type, ti, (r - (reps - 1) / 2) * 0.004);
+    const want = course.expect ? course.expect(type) : null;
+    const good = want === null ? rec.bin !== 'none' : rec.bin === want;
+    if (good) ok++;
+    total++;
+    const st = Object.entries(rec.stages).map(([k, v]) => `${k}@${f(v)}`).join(' ');
+    console.log(`${good ? 'ok ' : 'BAD'} ${type.id.padEnd(9)} avgV ${f(rec.avgSpeed)} maxV ${f(rec.maxSpeed)} ${st} ${rec.finish !== null ? 'finish ' + f(rec.finish, 3) : ''} bin ${rec.bin}${want ? ' want ' + want : ''} final ${f(rec.final.x, 3)},${f(rec.final.y, 3)},${f(rec.final.z, 3)} t ${f(rec.t, 1)}`);
   }
 }
+console.log(`singles: ${ok}/${total}`);
 
 if (args.crowd) {
   const phys = new Physics(RAPIER, course);
-  const s = course.spawn;
-  const queue = [];
+  if (course.gate) phys.setGate(true);
   const n = Number(args.crowd);
-  for (let i = 0; i < n; i++) queue.push({ at: i * Number(args.gap || 0.6), type: MARBLE_TYPES[i % MARBLE_TYPES.length] });
+  const gap = Number(args.gap || 0.85);
+  const queue = [];
+  for (let i = 0; i < n; i++) queue.push({ at: i * gap, ti: i % MARBLE_TYPES.length });
   let t = 0;
-  while (t < n * Number(args.gap || 0.6) + 20) {
+  while (t < n * gap + 25) {
     while (queue.length && queue[0].at <= t) {
       const q = queue.shift();
-      phys.addMarble(q.type, { x: s.x + (Math.random() - 0.5) * 0.01, y: s.y, z: s.z + (Math.random() - 0.5) * 0.01 });
+      const s = spawnPoint(q.ti);
+      phys.addMarble(MARBLE_TYPES[q.ti], { x: s.x + (Math.random() - 0.5) * 0.006, y: s.y, z: s.z + (Math.random() - 0.5) * 0.006 });
     }
     phys.step();
     t += STEP;
@@ -80,10 +86,10 @@ if (args.crowd) {
   let good = 0;
   for (const m of phys.marbles) {
     const p = m.body.translation();
-    const b = binOf(p.x);
-    const inTray = p.z > LAYOUT.bins.z0 && p.z < LAYOUT.bins.z1 && p.y < 0.08;
-    if (inTray && b === densityClass(m.type.density)) good++;
-    else console.log('stray', m.type.id, f(p.x), f(p.y), f(p.z), b);
+    const bin = binOf(p);
+    const want = course.expect ? course.expect(m.type) : null;
+    if (want === null ? bin !== 'none' : bin === want) good++;
+    else console.log('stray', m.type.id, f(p.x, 3), f(p.y, 3), f(p.z, 3), bin);
   }
-  console.log(`crowd: ${good}/${phys.marbles.length} sorted correctly`);
+  console.log(`crowd: ${good}/${phys.marbles.length}`);
 }

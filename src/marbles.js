@@ -3,6 +3,7 @@ export const MARBLE_RADIUS = 0.0125;
 export const MARBLE_TYPES = [
   {
     id: 'catseye',
+    rolling: 4.2,
     name: "Cat's Eye",
     substance: 'Soda-lime glass',
     density: 2500,
@@ -12,6 +13,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'aurora',
+    rolling: 4.2,
     name: 'Aurora',
     substance: 'Opaque art glass',
     density: 2600,
@@ -21,6 +23,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'acrylic',
+    rolling: 4.8,
     name: 'Acrylic',
     substance: 'Cast PMMA',
     density: 1180,
@@ -30,6 +33,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'oak',
+    rolling: 5.4,
     name: 'Oak',
     substance: 'Turned white oak',
     density: 750,
@@ -39,6 +43,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'rubber',
+    rolling: 7.5,
     name: 'Super Ball',
     substance: 'Polybutadiene rubber',
     density: 1150,
@@ -48,6 +53,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'steel',
+    rolling: 3.4,
     name: 'Chrome Steel',
     substance: 'Bearing steel',
     density: 7850,
@@ -57,6 +63,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'brass',
+    rolling: 3.7,
     name: 'Brass',
     substance: 'C360 brass',
     density: 8500,
@@ -66,6 +73,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'copper',
+    rolling: 3.7,
     name: 'Copper',
     substance: 'Oxygen-free copper',
     density: 8960,
@@ -75,6 +83,7 @@ export const MARBLE_TYPES = [
   },
   {
     id: 'tungsten',
+    rolling: 3.4,
     name: 'Tungsten',
     substance: 'Tungsten carbide',
     density: 19300,

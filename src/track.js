@@ -82,7 +82,7 @@ export function buildPath(rawPoints, { ds = 0.006, designSpeed = 0.9, maxBank = 
   const rawBank = [];
   for (let i = 0; i < count; i++) {
     const t = tangents[i];
-    const s = fixedSide ? fixedSide.clone() : new THREE.Vector3().crossVectors(t, UP).normalize();
+    const s = fixedSide ? fixedSide.clone().addScaledVector(t, -fixedSide.dot(t)).normalize() : new THREE.Vector3().crossVectors(t, UP).normalize();
     sides.push(s);
     normals.push(new THREE.Vector3().crossVectors(s, t).normalize());
     const ta = tangents[Math.max(0, i - 1)];
@@ -115,12 +115,17 @@ export function buildPath(rawPoints, { ds = 0.006, designSpeed = 0.9, maxBank = 
   return { points, tangents, sides, normals, bank, dist, length: dist[count - 1] };
 }
 
-export function channelProfile({ radius, thickness, phiMax, segments = 28, capSegments = 6 }) {
+export function channelProfile({ radius, thickness, phiMax, phiNeg = phiMax, segments = 28, capSegments = 6, clampFrom = null }) {
   const prof = [];
   const inner = [];
-  const outer = [];
   for (let k = 0; k <= segments; k++) {
-    const phi = -phiMax + (2 * phiMax * k) / segments;
+    let phi;
+    if (clampFrom) {
+      phi = -clampFrom + (2 * clampFrom * k) / segments;
+      if (phi > phiMax) phi = phiMax + (phi - phiMax) * 0.04;
+      if (phi < -phiNeg) phi = -phiNeg + (phi + phiNeg) * 0.04;
+    }
+    else phi = -phiNeg + ((phiMax + phiNeg) * k) / segments;
     inner.push(phi);
   }
   for (const phi of inner) {
@@ -143,7 +148,7 @@ export function channelProfile({ radius, thickness, phiMax, segments = 28, capSe
     const phi = inner[k];
     prof.push({ x: (radius + thickness) * Math.sin(phi), y: -(radius + thickness) * Math.cos(phi), nx: Math.sin(phi), ny: -Math.cos(phi), part: 'outer' });
   }
-  cap(-phiMax, -1);
+  cap(-phiNeg, -1);
   let acc = 0;
   prof.forEach((p, i) => {
     if (i > 0) acc += Math.hypot(p.x - prof[i - 1].x, p.y - prof[i - 1].y);
@@ -156,7 +161,8 @@ function frameAt(path, i, x, y, out) {
   return out.copy(path.points[i]).addScaledVector(path.sides[i], x).addScaledVector(path.normals[i], y);
 }
 
-export function sweepGeometry(path, profile, { startCap = false, endCap = false, uvScale = 1 } = {}) {
+export function sweepGeometry(path, profile, { startCap = false, endCap = false, uvScale = 1, profileAt = null } = {}) {
+  const P = profileAt || (() => profile);
   const prof = profile.prof;
   const m = prof.length;
   const count = path.points.length;
@@ -167,8 +173,9 @@ export function sweepGeometry(path, profile, { startCap = false, endCap = false,
   const v = new THREE.Vector3();
   const nn = new THREE.Vector3();
   for (let i = 0; i < count; i++) {
+    const pr = P(i).prof;
     for (let j = 0; j <= m; j++) {
-      const p = prof[j % m];
+      const p = pr[j % m];
       frameAt(path, i, p.x, p.y, v);
       positions.push(v.x, v.y, v.z);
       nn.copy(path.sides[i]).multiplyScalar(p.nx).addScaledVector(path.normals[i], p.ny).normalize();
@@ -193,8 +200,9 @@ export function sweepGeometry(path, profile, { startCap = false, endCap = false,
     const outerIdx = [];
     const capCount = (m - 2 * (seg + 1)) / 2;
     for (let k = 0; k <= seg; k++) {
-      const pin = prof[k];
-      const pout = prof[seg + capCount + (seg - k) + 1];
+      const pr = P(i).prof;
+      const pin = pr[k];
+      const pout = pr[seg + capCount + (seg - k) + 1];
       frameAt(path, i, pin.x, pin.y, v);
       positions.push(v.x, v.y, v.z);
       normals.push(t.x, t.y, t.z);
@@ -271,15 +279,17 @@ export function fixWinding(geo) {
   }
 }
 
-export function channelCollider(path, profile, { startCap = false, endCap = false, extend = 0 } = {}) {
+export function channelCollider(path, profile, { startCap = false, endCap = false, extend = 0, profileAt = null } = {}) {
+  const P = profileAt || (() => profile);
   const seg = profile.segments;
   const verts = [];
   const indices = [];
   const v = new THREE.Vector3();
   const count = path.points.length;
   for (let i = 0; i < count; i++) {
+    const pr = P(i).prof;
     for (let k = 0; k <= seg; k++) {
-      const p = profile.prof[k];
+      const p = pr[k];
       frameAt(path, i, p.x, p.y, v);
       if (extend && i === 0) v.addScaledVector(path.tangents[0], -extend);
       if (extend && i === count - 1) v.addScaledVector(path.tangents[count - 1], extend);

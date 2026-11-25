@@ -153,6 +153,53 @@ export class SoundBoard {
     src.start(t, Math.random() * 1.5, len + 0.02);
   }
 
+  tick(distance) {
+    if (!this.ctx || !this.enabled || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.002;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 3200;
+    f.Q.value = 4;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.05 / (0.5 + distance), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.025);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t, Math.random(), 0.04);
+  }
+
+  note(freq, strength, pan = 0, distance = 1) {
+    if (!this.ctx || !this.enabled || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.002;
+    const out = ctx.createGain();
+    out.gain.value = Math.min(0.5, 0.12 + strength * 0.35) / (0.6 + distance * 0.7);
+    const panner = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (panner) {
+      panner.pan.value = Math.max(-1, Math.min(1, pan));
+      out.connect(panner).connect(this.master);
+      panner.connect(this.verb);
+    } else {
+      out.connect(this.master);
+    }
+    [[1, 1, 1.1], [2.76, 0.28, 0.35], [5.4, 0.12, 0.15], [4, 0.05, 0.3]].forEach(([ratio, amp, decay]) => {
+      const f = freq * ratio;
+      if (f > ctx.sampleRate * 0.4) return;
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(amp, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + decay + 0.05);
+    });
+  }
+
   ambient({ rolling = 0, rollPitch = 1, funnel = 0, fan = 0, fanDistance = 1 }) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

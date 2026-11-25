@@ -38,13 +38,24 @@
   <p>A marble run on the desk</p>
 </header>
 
-<nav class="views panel" aria-label="Camera">
-  <button type="button" data-view="overview" class="active">Overview</button>
-  <button type="button" data-view="helix">Helix</button>
-  <button type="button" data-view="funnel">Funnel</button>
-  <button type="button" data-view="sorter">Sorter</button>
-  <button type="button" data-view="follow">Follow</button>
-</nav>
+<nav class="views panel" aria-label="Camera" id="views"></nav>
+
+<div class="course panel" id="course">
+  <button type="button" id="course-btn" aria-haspopup="true" aria-expanded="false">
+    <span class="course-label">Course</span>
+    <span id="course-name">Vortex</span>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+  </button>
+  <div id="course-menu" class="course-menu" role="menu"></div>
+</div>
+
+<aside id="results" class="results panel" hidden>
+  <div class="results-head">
+    <h3>Race</h3>
+    <span id="results-status">Ready</span>
+  </div>
+  <ol id="results-list"></ol>
+</aside>
 
 <div class="toggles panel">
   <button type="button" id="wind" class="icon" aria-pressed="true" title="Fan">
@@ -78,7 +89,7 @@
       <div><dt>Mass</dt><dd id="card-mass">64.2 g</dd></div>
       <div><dt>Bounce</dt><dd id="card-bounce">Crisp</dd></div>
       <div><dt>Grip</dt><dd id="card-grip">Slick</dd></div>
-      <div><dt>Lands in</dt><dd id="card-bin">Heavy</dd></div>
+      <div><dt>Rolling</dt><dd id="card-roll">Easy</dd></div>
     </dl>
   </div>
 </aside>

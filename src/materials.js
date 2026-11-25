@@ -55,6 +55,8 @@ export function createSceneMaterials() {
     curtain: new THREE.MeshPhysicalMaterial({ color: 0xe9dcc4, roughness: 0.9, sheen: 0.6, sheenColor: new THREE.Color('#fff1da'), transparent: true, opacity: 0.86, side: THREE.DoubleSide }),
     candle: new THREE.MeshStandardMaterial({ color: 0xf3e6cf, roughness: 0.6, emissive: 0xff9a40, emissiveIntensity: 0.15 }),
     flame: new THREE.MeshBasicMaterial({ color: 0xffc070 }),
+    ceramicDark: new THREE.MeshPhysicalMaterial({ color: 0x2f4a46, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 }),
+    finishFlag: new THREE.MeshStandardMaterial({ color: 0xf1e9dc, roughness: 0.5 }),
     jar: new THREE.MeshPhysicalMaterial({ color: 0xffd9a8, roughness: 0.1, transparent: true, opacity: 0.35 }),
   };
   m.flame.color.multiplyScalar(6);

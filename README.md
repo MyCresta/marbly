@@ -2,29 +2,41 @@
 
 A physics marble run on a cozy desk, rendered in the browser.
 
-Marbles drop from a brass hopper, roll down a banked maple helix, orbit a copper vortex funnel and shoot off a ski jump past a little desk fan. The fan blows harder on light marbles than heavy ones, so every marble lands in a felt bin that matches its density.
+Pick a course, pick a marble, and watch it roll. Nine marble materials share the same 25 mm size, so density, grip, bounce and rolling resistance decide how each one behaves.
+
+## Courses
+
+| Course | What happens |
+| --- | --- |
+| Vortex | A banked helix feeds a copper vortex funnel at rim level. A copper elbow drops into a ski jump past a desk fan, which pushes light marbles further, so every marble lands in a felt bin that matches its density. |
+| Switchback | Four hairpin rows wind down to the front of the desk and finish on a 30-bar brass xylophone that plays the opening of Ode to Joy. Heavier, easier rolling marbles play it faster. |
+| Loop | A 45° drop into a corkscrew loop, tuned to sit right at the edge of making it. Metals almost always loop, glass usually does, oak and rubber never. Marbles that stall in the dip before the loop drop through a trapdoor into the Fell tray. |
+| Race | Nine lanes, one per marble, a brass starting gate and a stopwatch. Rolling resistance and air drag decide the order. Tungsten and steel win, the rubber ball comes last. |
+
+Switch courses from the picker under the title, with the left and right arrow keys, or by linking straight to one, for example `#loop`.
 
 ## Marbles
 
-| Key | Marble | Density (g/cm³) | Lands in |
+| Key | Marble | Density (g/cm³) | Rolling |
 | --- | --- | --- | --- |
-| 1 | Cat's Eye, soda-lime glass | 2.50 | Medium |
-| 2 | Aurora, opaque art glass | 2.60 | Medium |
-| 3 | Acrylic, cast PMMA | 1.18 | Light |
-| 4 | Oak | 0.75 | Light |
-| 5 | Super Ball, rubber | 1.15 | Light |
-| 6 | Chrome Steel | 7.85 | Heavy |
-| 7 | Brass | 8.50 | Heavy |
-| 8 | Copper | 8.96 | Heavy |
-| 9 | Tungsten carbide | 19.30 | Heavy |
+| 1 | Cat's Eye, soda-lime glass | 2.50 | Smooth |
+| 2 | Aurora, opaque art glass | 2.60 | Smooth |
+| 3 | Acrylic, cast PMMA | 1.18 | Draggy |
+| 4 | Oak | 0.75 | Draggy |
+| 5 | Super Ball, rubber | 1.15 | Sticky |
+| 6 | Chrome Steel | 7.85 | Easy |
+| 7 | Brass | 8.50 | Easy |
+| 8 | Copper | 8.96 | Easy |
+| 9 | Tungsten carbide | 19.30 | Easy |
 
-Every marble is the same 25 mm size, so density alone sets its mass. Mass decides how much the fan and air drag can push it around, and how hard it knocks other marbles. Friction and bounciness also differ per material, so rubber hops and steel slides.
+Density sets mass, which decides how much the fan and air drag can push a marble around and how hard it knocks others. Rolling resistance is modelled per material, viscous at low speed and capped at speed, which keeps marbles at a calm, realistic pace on gentle track while letting them carry speed down steep drops without sliding. Friction and bounciness also differ, so rubber grips and hops while steel is slick.
 
 ## Controls
 
 * Space or Enter drops the selected marble
 * 1 to 9 picks a marble
 * A toggles auto drop, C clears the desk, F toggles follow cam
+* Left and right arrows switch course
 * Drag to orbit, scroll or pinch to zoom, right drag to pan
 
 ## Stack
@@ -59,4 +71,4 @@ npm install
 npm run vendor
 ```
 
-`npm run sim` runs the course headlessly in Node and reports where each marble type lands, which is handy after changing the track or physics constants.
+`npm run sim -- course=loop` runs a course headlessly in Node and reports where each marble type ends up and how long it took. Add `reps=3` for jittered repeats or `crowd=18 gap=1` to drop a stream of marbles. It is the quickest way to check a track change before looking at it in the browser.

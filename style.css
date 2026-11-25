@@ -15,6 +15,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -429,6 +430,138 @@ body.ready .dock { transform: translate(-50%, 0); }
   line-height: 1.6;
 }
 
+.course {
+  top: 92px;
+  left: var(--gutter);
+  border-radius: 16px;
+  min-width: 210px;
+}
+#course-btn {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  row-gap: 1px;
+}
+.course-label {
+  grid-column: 1;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+#course-name {
+  grid-column: 1;
+  font-family: var(--serif);
+  font-size: 20px;
+}
+#course-btn svg {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.25s;
+}
+body.menu-open #course-btn svg { transform: rotate(180deg); }
+.course-menu {
+  display: none;
+  padding: 4px 6px 8px;
+  border-top: 1px solid var(--line);
+}
+body.menu-open .course-menu { display: block; }
+.course-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+.course-item:hover { background: rgba(255, 232, 200, 0.08); }
+.course-item.active { background: rgba(232, 180, 108, 0.16); }
+.course-item strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
+.course-item span {
+  display: block;
+  max-width: 230px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+}
+
+.results {
+  top: 178px;
+  left: var(--gutter);
+  width: 230px;
+  padding: 14px 14px 10px;
+}
+body.menu-open .results { opacity: 0; pointer-events: none; }
+.results-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.results h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 20px;
+}
+#results-status {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+#results-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pos;
+}
+#results-list li {
+  display: grid;
+  grid-template-columns: 18px 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  counter-increment: pos;
+}
+#results-list li::before {
+  content: counter(pos);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+#results-list li.pending::before { content: ''; }
+#results-list img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+#results-list .tm {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+#results-list li:first-child:not(.pending) .tm { color: var(--amber); }
+#results-list:empty::after {
+  content: 'Press Drop all to start a race';
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
 @media (max-width: 1100px) {
   .card { width: 240px; }
   .views { left: auto; right: var(--gutter); top: 70px; transform: translateY(8px); }
@@ -437,6 +570,12 @@ body.ready .dock { transform: translate(-50%, 0); }
 }
 
 @media (max-width: 760px) {
+  .course { top: 56px; min-width: 0; }
+  #course-btn { padding: 7px 12px; }
+  #course-name { font-size: 16px; }
+  .course-label { display: none; }
+  .results { top: 110px; width: 200px; padding: 10px 12px 6px; }
+  #results-list li { padding: 2px 0; font-size: 12px; }
   .brand { top: 16px; }
   .brand h1 { font-size: 24px; }
   .brand p { display: none; }
